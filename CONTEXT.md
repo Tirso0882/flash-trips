@@ -8,6 +8,30 @@ Flash Trips helps a planner turn a leisure-travel request into an evidence-backe
 The person who owns a trip-planning interaction and approves the resulting travel plan for themselves and any companions.
 _Avoid_: User, customer, lead traveller
 
+**External Identity**:
+A provider-authenticated identity associated with a planner through a stable issuer and subject, never through email equality alone.
+_Avoid_: Planner, email identity, login account
+
+**Planner Access Status**:
+The application-owned condition that determines whether a planner remains eligible to use authenticated Flash Trips services after accepting an invitation.
+_Avoid_: Invitation status, identity-provider status, account status
+
+**Operator**:
+The person authorised to administer invitations and planner access status without thereby gaining ownership of or access to a planner's trips.
+_Avoid_: Planner, identity-provider administrator, trip owner
+
+**Invitation**:
+A time-bounded, single-recipient offer of eligibility to become a planner, issued and governed by Flash Trips and accepted at most once.
+_Avoid_: Identity-provider invitation, access group, reusable signup link
+
+**Guest Session**:
+A temporary browser-bound interaction for an unauthenticated visitor's general, non-personalised travel questions that carries no planner identity or trip ownership.
+_Avoid_: Guest account, anonymous planner, anonymous trip
+
+**Planner Profile**:
+The minimal service information and reusable preferences associated with a planner, distinct from any individual trip request or optional marketing information.
+_Avoid_: User profile, trip request, marketing profile
+
 **Companion**:
 A traveller included in the planner's trip who does not independently own or edit the plan.
 _Avoid_: User, collaborator, account member
