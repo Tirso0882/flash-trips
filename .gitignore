@@ -1,0 +1,32 @@
+# Operating-system and local editor files
+.DS_Store
+*.swp
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.log
+
+# Python environments and caches
+.trips/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node.js and frontend build outputs
+node_modules/
+.next/
+.turbo/
+coverage/
+dist/
+
+# Agent/skills files
+.agents/skills/
+
+# Lock files
+skills-lock.json
