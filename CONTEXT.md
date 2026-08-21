@@ -16,6 +16,26 @@ _Avoid_: Planner, email identity, login account
 The application-owned condition that determines whether a planner remains eligible to use authenticated Flash Trips services after accepting an invitation.
 _Avoid_: Invitation status, identity-provider status, account status
 
+**Access Recovery Review**:
+A bounded review of security-sensitive actions after suspected identity or session compromise that must complete before planning mutations, Approvals, and handbook access resume.
+_Avoid_: Revalidation Required, rollback, audit log
+
+**Protective Access Hold**:
+A temporary application-owned restriction triggered by strong compromise or abuse signals that revokes active sessions and blocks sensitive operations pending recent authentication or Operator review.
+_Avoid_: Planner Access Status, rate limit, permanent suspension
+
+**Security Audit Record**:
+An immutable, minimised account of an identity, authorisation, administration, disclosure, recovery, or deletion event, kept separate from Trip content and execution inspection.
+_Avoid_: Inspection Record, operational log, Trip history
+
+**Security Incident**:
+A suspected or confirmed event threatening confidentiality, integrity, or authorised availability that requires bounded containment, investigation, recovery, and closure.
+_Avoid_: Failed Run, ordinary provider outage, support request
+
+**Deletion Receipt**:
+A non-identifying record that a bounded privacy deletion completed without retaining the personal data or ownership relationship that was removed.
+_Avoid_: Archived record, retained profile, data export
+
 **Operator**:
 The person authorised to administer invitations and planner access status without thereby gaining ownership of or access to a planner's trips.
 _Avoid_: Planner, identity-provider administrator, trip owner
@@ -27,6 +47,10 @@ _Avoid_: Identity-provider invitation, access group, reusable signup link
 **Guest Session**:
 A temporary browser-bound interaction for an unauthenticated visitor's general, non-personalised travel questions that carries no planner identity or trip ownership.
 _Avoid_: Guest account, anonymous planner, anonymous trip
+
+**Guest Intake Transfer**:
+A one-time, authenticated, planner-confirmed conversion of selected guest-provided travel details into a new Trip Request without transferring authority from the guest transcript.
+_Avoid_: Guest claim, automatic migration, account merge
 
 **Conversation Scope**:
 The explicit boundary for a Turn: Guest General, Authenticated General, Trip Intake, or one Trip Workspace bound to its visible Plan Revision.
@@ -48,9 +72,17 @@ _Avoid_: User profile, trip request, marketing profile
 A traveller included in the planner's trip who does not independently own or edit the plan.
 _Avoid_: User, collaborator, account member
 
+**Companion Travel Constraint**:
+A minimal typed requirement relevant to planning for a companion, recorded without an underlying medical, religious, legal, or other private explanation.
+_Avoid_: Companion profile, diagnosis, personal history
+
 **Trip**:
 A planned leisure journey covering one or more cities for a planner and optional companions.
 _Avoid_: Booking, order, itinerary
+
+**Sensitive Trip Data**:
+Private personal information associated with a trip, especially combinations of dates, locations, companions, budgets, and constraints that may reveal a person's movements or circumstances.
+_Avoid_: Public destination information, general travel question, Provider Observation
 
 **Trip Request**:
 The planner's stated goals, constraints, and requested planning services for a trip.
