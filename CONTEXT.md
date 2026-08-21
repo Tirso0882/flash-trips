@@ -251,3 +251,31 @@ _Avoid_: Raw trace, live provider refresh, canonical state
 **Capability**:
 A bounded unit of planning work that consumes established trip information and produces one complete, validated planning result or a typed explanation of why it could not do so.
 _Avoid_: Agent, graph node, provider integration
+
+**Evaluation Case**:
+A versioned example owned by one evaluation boundary that binds typed inputs and applicable expected outcomes to the evidence needed to assess them.
+_Avoid_: Prompt, trace, generic quality example
+
+**Evaluation Layer**:
+One of four complementary assessment techniques: deterministic verification, pointwise semantic judging, pairwise comparison, or human calibration of a judge.
+_Avoid_: Test stage, deployment environment, quality level
+
+**Critical Evaluation Failure**:
+An individual evaluation result proving a correctness, safety, grounding, authority, privacy, or execution-control violation that aggregate quality scores cannot offset.
+_Avoid_: Low average score, style issue, flaky test
+
+**Evaluation Fixture**:
+A versioned, provenance-bound synthetic or lawfully sanitised dependency response, Replay Bundle, or golden Inspection Record trace used without implicit live access.
+_Avoid_: Cache entry, production payload, stale provider response
+
+**Contract Baseline**:
+An immutable reviewed evaluation reference proving deterministic evaluator, schema, and fixture integrity without making a model-quality claim.
+_Avoid_: Quality Baseline, current model score, mutable snapshot
+
+**Quality Baseline**:
+An immutable reviewed evaluation reference binding actual candidate trajectories and semantic results to exact datasets, fixtures, policies, schemas, models, prompts, judges, and implementation versions.
+_Avoid_: Contract Baseline, latest run, Wanderlisted baseline
+
+**Evaluation Release Record**:
+An immutable account binding a promotion decision to the exact software, Evaluation Cases, fixtures, baselines, evaluators, models, results, uncertainty, cost authority, exclusions, and human approval considered.
+_Avoid_: CI log, deployment record, Quality Baseline
