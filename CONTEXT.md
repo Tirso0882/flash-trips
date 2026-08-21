@@ -176,6 +176,34 @@ _Avoid_: Prompt for confirmation, chat question
 One durable execution of an accepted planning action, with inspectable progress and exactly one terminal outcome.
 _Avoid_: Request, graph invocation, agent call
 
+**Fingerprint**:
+A deterministic identity binding the exact inputs, dependencies, Evidence, policies, schemas, and implementation versions relevant to a decision, reuse claim, or Approval.
+_Avoid_: Record identifier, integrity digest, timestamp
+
+**Execution Checkpoint**:
+A durable record of resumable workflow progress that cannot become or override canonical Trip state.
+_Avoid_: Approval Gate, Plan Revision, workflow truth
+
+**Approval Gate**:
+A workflow pause requiring a Planner decision bound to the exact Approval Request before the Run may proceed.
+_Avoid_: Execution Checkpoint, confirmation prompt, free-text agreement
+
+**Inspection Record**:
+An immutable, typed account of how a Turn or Run was routed, evaluated, progressed, and brought to an outcome, exposed only through audience-appropriate redacted views.
+_Avoid_: Debug log, raw transcript, telemetry span
+
+**Run Reconstruction**:
+A read-only explanation of a historical Run derived from its inspection records without executing dependencies or changing canonical state.
+_Avoid_: Replay, retry, resume
+
+**Verification Replay**:
+A linked, non-canonical execution over recorded logical inputs and frozen or mocked dependency responses that either reproduces the original bound implementation exactly or compares a candidate implementation semantically without mutating canonical state.
+_Avoid_: Live rerun, retry, resume, output reuse
+
+**Replay Bundle**:
+The access-controlled recorded inputs, dependency responses, versions, and integrity references sufficient to perform a lawful Verification Replay of a Turn or Run.
+_Avoid_: Raw trace, live provider refresh, canonical state
+
 **Capability**:
 A bounded unit of planning work that consumes established trip information and produces one complete, validated planning result or a typed explanation of why it could not do so.
 _Avoid_: Agent, graph node, provider integration
