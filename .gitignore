@@ -28,5 +28,8 @@ dist/
 # Agent/skills files
 .agents/skills/
 
+# Documentation images
+docs/images/
+
 # Lock files
 skills-lock.json
