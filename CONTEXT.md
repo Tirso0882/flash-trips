@@ -28,6 +28,18 @@ _Avoid_: Identity-provider invitation, access group, reusable signup link
 A temporary browser-bound interaction for an unauthenticated visitor's general, non-personalised travel questions that carries no planner identity or trip ownership.
 _Avoid_: Guest account, anonymous planner, anonymous trip
 
+**Conversation Scope**:
+The explicit boundary for a Turn: Guest General, Authenticated General, Trip Intake, or one Trip Workspace bound to its visible Plan Revision.
+_Avoid_: Chat mode, inferred trip context, conversation memory
+
+**Turn**:
+A single Planner or guest input together with its validated classification and typed conversational outcome within one Conversation Scope.
+_Avoid_: Prompt, message blob, agent step
+
+**Pending Clarification**:
+A temporary, scope-bound request for the Planner to resolve one ambiguous Turn without granting authority to change a Trip or approve a decision.
+_Avoid_: Follow-up chat, assumed intent, implicit confirmation
+
 **Planner Profile**:
 The minimal service information and reusable preferences associated with a planner, distinct from any individual trip request or optional marketing information.
 _Avoid_: User profile, trip request, marketing profile
