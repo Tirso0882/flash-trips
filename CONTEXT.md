@@ -108,6 +108,10 @@ _Avoid_: Deleted, automatically invalid
 A versioned statement of the bounded roles, markets, modes, date horizons, and currencies for which an external provider is eligible to serve a capability.
 _Avoid_: Global support, assumed coverage, provider availability
 
+**Reasoning Profile**:
+A versioned purpose-specific contract that deterministically bounds which model-backed interpretation or proposal may run, with what inputs, tools, resource limits, and validation obligations.
+_Avoid_: Model size, agent role, self-selected model
+
 **Provider Observation**:
 A source-specific, time-bounded external result received from a travel or information provider before domain validation establishes whether it may support a travel plan.
 _Avoid_: Provider result, raw fact, recommendation
@@ -156,6 +160,10 @@ _Avoid_: Hard ceiling, guaranteed total
 An explicit spending ceiling that a proposed travel plan cannot exceed without a new plan amendment.
 _Avoid_: Target Budget, preference
 
+**External Cost Budget**:
+A versioned hard allowance for chargeable model and provider work, enforced independently of the planner's trip spending limits.
+_Avoid_: Target Budget, Hard Budget Limit, provider quota
+
 **Feasibility Conflict**:
 A typed explanation of why provisional selections cannot satisfy the fixed trip structure, timing, route, opening, or budget constraints.
 _Avoid_: Model concern, planning failure
@@ -171,6 +179,10 @@ _Avoid_: Confirmation message, conversational yes
 **Approval Request**:
 The immutable, bounded decision presented to the planner, identifying the exact revision, evidence, warning, or proposed result to approve or reject.
 _Avoid_: Prompt for confirmation, chat question
+
+**Paid Execution Authorization**:
+An Operator-controlled, purpose-bound allowance for non-product live model or provider calls, limited by environment, providers, maximum spend, and expiry.
+_Avoid_: Approval, Planner consent, unlimited API access
 
 **Run**:
 One durable execution of an accepted planning action, with inspectable progress and exactly one terminal outcome.
