@@ -1,0 +1,7 @@
+{
+  "name": "flash-trips",
+  "private": true,
+  "scripts": {
+    "prototype:planner": "python3 -m http.server 4173 --directory docs/prototypes"
+  }
+}

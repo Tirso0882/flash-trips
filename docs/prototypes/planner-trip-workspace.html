@@ -1,0 +1,1891 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flash Trips — Planner workspace prototype</title>
+    <style>
+      /*
+       * THROWAWAY PROTOTYPE for issue #10.
+       * Three variants of the Trip Workspace, switchable via ?variant=A|B|C,
+       * using one guided scenario from grounded answer to Handbook Export.
+       */
+      :root {
+        color-scheme: light;
+        --ink: #18251f;
+        --muted: #68756e;
+        --line: #d9ded9;
+        --paper: #fbfaf6;
+        --surface: #ffffff;
+        --forest: #173f31;
+        --forest-2: #245e48;
+        --mint: #dff1e8;
+        --lime: #dbf480;
+        --amber: #f8e4aa;
+        --amber-ink: #664b00;
+        --red: #a43d36;
+        --blue: #dcebf6;
+        --shadow: 0 14px 34px rgb(23 63 49 / 10%);
+        --radius: 14px;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        color: var(--ink);
+        background: var(--paper);
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .prototype-ribbon {
+        padding: 7px 16px;
+        color: white;
+        background: #8e4d15;
+        font-size: 12px;
+        font-weight: 750;
+        letter-spacing: 0.08em;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      .app-header {
+        min-height: 68px;
+        padding: 12px 24px;
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--line);
+        background: rgb(255 255 255 / 88%);
+        backdrop-filter: blur(12px);
+      }
+
+      .brand {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        color: var(--forest);
+        font-weight: 850;
+        letter-spacing: -0.03em;
+      }
+
+      .brand-mark {
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 10px;
+        color: white;
+        background: var(--forest);
+      }
+
+      .trip-heading {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .trip-heading strong,
+      .trip-heading span {
+        display: block;
+      }
+
+      .trip-heading strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .trip-heading span {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .revision-badge,
+      .status-badge,
+      .chip {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        width: fit-content;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 720;
+        white-space: nowrap;
+      }
+
+      .revision-badge {
+        padding: 8px 11px;
+        border: 1px solid #bad1c5;
+        color: var(--forest);
+        background: var(--mint);
+      }
+
+      .status-badge,
+      .chip {
+        padding: 5px 8px;
+        border: 1px solid var(--line);
+        background: white;
+      }
+
+      .status-badge.warning,
+      .chip.warning {
+        border-color: #e6c968;
+        color: var(--amber-ink);
+        background: #fff8dc;
+      }
+
+      .status-badge.success,
+      .chip.success {
+        border-color: #9bc7b0;
+        color: var(--forest);
+        background: var(--mint);
+      }
+
+      .status-badge.running,
+      .chip.running {
+        border-color: #9ebed5;
+        color: #174764;
+        background: var(--blue);
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .eyebrow {
+        margin: 0 0 7px;
+        color: var(--forest-2);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 8px;
+        font-size: clamp(25px, 3vw, 42px);
+        letter-spacing: -0.045em;
+        line-height: 1.03;
+      }
+
+      h2 {
+        margin-bottom: 12px;
+        font-size: 20px;
+        letter-spacing: -0.025em;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 15px;
+      }
+
+      p {
+        line-height: 1.48;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        box-shadow: 0 1px 2px rgb(23 63 49 / 4%);
+      }
+
+      .panel-pad {
+        padding: 18px;
+      }
+
+      .primary,
+      .secondary,
+      .ghost,
+      .icon-button {
+        min-height: 38px;
+        border-radius: 10px;
+        font-weight: 750;
+      }
+
+      .primary {
+        padding: 9px 14px;
+        border: 1px solid var(--forest);
+        color: white;
+        background: var(--forest);
+      }
+
+      .primary:hover {
+        background: var(--forest-2);
+      }
+
+      .secondary {
+        padding: 9px 14px;
+        border: 1px solid #a7b8af;
+        color: var(--forest);
+        background: white;
+      }
+
+      .ghost {
+        padding: 8px 10px;
+        border: 0;
+        color: var(--forest);
+        background: transparent;
+      }
+
+      .icon-button {
+        min-width: 38px;
+        border: 1px solid rgb(255 255 255 / 30%);
+        color: white;
+        background: rgb(255 255 255 / 12%);
+      }
+
+      .button-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .button-stack {
+        display: grid;
+        gap: 8px;
+      }
+
+      .button-stack button {
+        width: 100%;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 5px;
+        padding: 5px;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #f2f3ef;
+      }
+
+      .tab {
+        padding: 8px 11px;
+        border: 0;
+        border-radius: 8px;
+        color: var(--muted);
+        background: transparent;
+        font-size: 12px;
+        font-weight: 750;
+        white-space: nowrap;
+      }
+
+      .tab.active {
+        color: var(--forest);
+        background: white;
+        box-shadow: 0 1px 3px rgb(20 45 34 / 12%);
+      }
+
+      .plan-list,
+      .event-list,
+      .citation-list,
+      .revision-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .plan-row {
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 13px 0;
+        border-bottom: 1px solid #eaede9;
+      }
+
+      .plan-row:last-child {
+        border-bottom: 0;
+      }
+
+      .plan-icon {
+        width: 38px;
+        height: 38px;
+        display: grid;
+        place-items: center;
+        border-radius: 11px;
+        background: #eef3ef;
+        font-size: 17px;
+      }
+
+      .plan-row strong,
+      .plan-row small {
+        display: block;
+      }
+
+      .plan-row small {
+        margin-top: 3px;
+        color: var(--muted);
+      }
+
+      .money {
+        font-variant-numeric: tabular-nums;
+        font-weight: 800;
+      }
+
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .metric {
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: #f8f8f4;
+      }
+
+      .metric span,
+      .metric strong {
+        display: block;
+      }
+
+      .metric span {
+        margin-bottom: 5px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .metric strong {
+        font-size: 17px;
+      }
+
+      .message {
+        width: fit-content;
+        max-width: 94%;
+        margin-bottom: 13px;
+        padding: 11px 13px;
+        border-radius: 13px 13px 13px 4px;
+        background: #eef2ed;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .message.planner {
+        margin-left: auto;
+        border-radius: 13px 13px 4px;
+        color: white;
+        background: var(--forest);
+      }
+
+      .message .citation {
+        display: inline-flex;
+        margin: 2px;
+        padding: 1px 5px;
+        border: 1px solid #9fb6aa;
+        border-radius: 5px;
+        color: var(--forest);
+        background: white;
+        font-size: 10px;
+        font-weight: 800;
+      }
+
+      .message.planner .citation {
+        color: white;
+        background: transparent;
+      }
+
+      .composer {
+        display: flex;
+        gap: 7px;
+        margin-top: auto;
+        padding-top: 12px;
+      }
+
+      .composer input {
+        width: 100%;
+        min-width: 0;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: white;
+      }
+
+      .composer button {
+        padding-inline: 13px;
+      }
+
+      .source-card {
+        padding: 11px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fbfbf8;
+        font-size: 12px;
+      }
+
+      .source-card + .source-card {
+        margin-top: 8px;
+      }
+
+      .source-card strong,
+      .source-card span {
+        display: block;
+      }
+
+      .source-card span {
+        margin-top: 3px;
+        color: var(--muted);
+      }
+
+      .diff {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 9px;
+        align-items: center;
+        margin: 13px 0;
+      }
+
+      .diff-box {
+        min-width: 0;
+        padding: 11px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f8f8f5;
+      }
+
+      .diff-box.new {
+        border-color: #9bc7b0;
+        background: var(--mint);
+      }
+
+      .diff-box small,
+      .diff-box strong {
+        display: block;
+      }
+
+      .diff-box small {
+        margin-bottom: 4px;
+        color: var(--muted);
+      }
+
+      .impact-list {
+        display: grid;
+        gap: 7px;
+        margin: 12px 0;
+      }
+
+      .impact {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        font-size: 12px;
+      }
+
+      .impact::before {
+        content: "→";
+        color: var(--forest-2);
+        font-weight: 900;
+      }
+
+      .progress-track {
+        height: 8px;
+        margin: 10px 0 15px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e4e9e6;
+      }
+
+      .progress-fill {
+        width: 62%;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--forest-2);
+      }
+
+      .event {
+        position: relative;
+        padding: 0 0 14px 24px;
+        font-size: 12px;
+      }
+
+      .event::before {
+        content: "";
+        position: absolute;
+        top: 4px;
+        left: 3px;
+        width: 8px;
+        height: 8px;
+        border: 2px solid white;
+        border-radius: 50%;
+        background: #86a596;
+        box-shadow: 0 0 0 1px #86a596;
+      }
+
+      .event::after {
+        content: "";
+        position: absolute;
+        top: 16px;
+        bottom: 0;
+        left: 7px;
+        width: 1px;
+        background: var(--line);
+      }
+
+      .event:last-child::after {
+        display: none;
+      }
+
+      .event.active::before {
+        background: var(--forest);
+        box-shadow: 0 0 0 4px var(--mint);
+      }
+
+      .warning-box,
+      .success-box,
+      .info-box {
+        padding: 13px;
+        border-radius: 11px;
+        font-size: 13px;
+      }
+
+      .warning-box {
+        border: 1px solid #e2c358;
+        color: var(--amber-ink);
+        background: #fff8dc;
+      }
+
+      .success-box {
+        border: 1px solid #9bc7b0;
+        color: var(--forest);
+        background: var(--mint);
+      }
+
+      .info-box {
+        border: 1px solid #a9c5d8;
+        color: #174764;
+        background: #edf6fb;
+      }
+
+      .binding {
+        margin: 12px 0;
+        padding: 9px 10px;
+        border-left: 3px solid #9ca8a1;
+        color: var(--muted);
+        background: #f5f5f1;
+        font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .action-card {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: white;
+      }
+
+      .action-card.attention {
+        border-color: #dfc157;
+        box-shadow: 0 0 0 3px rgb(248 228 170 / 35%);
+      }
+
+      .action-card + .action-card {
+        margin-top: 11px;
+      }
+
+      .step-strip {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 4px;
+      }
+
+      .step-button {
+        min-height: 5px;
+        padding: 0;
+        overflow: hidden;
+        border: 0;
+        border-radius: 999px;
+        color: transparent;
+        background: #dfe4e0;
+      }
+
+      .step-button.complete {
+        background: #8db6a2;
+      }
+
+      .step-button.current {
+        background: var(--forest);
+      }
+
+      .prototype-switcher {
+        position: fixed;
+        z-index: 50;
+        right: 50%;
+        bottom: 18px;
+        width: min(620px, calc(100vw - 24px));
+        transform: translateX(50%);
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr) 42px;
+        gap: 8px;
+        align-items: center;
+        padding: 9px;
+        border: 1px solid rgb(255 255 255 / 24%);
+        border-radius: 17px;
+        color: white;
+        background: #101d18;
+        box-shadow: 0 14px 40px rgb(0 0 0 / 28%);
+      }
+
+      .switcher-copy {
+        min-width: 0;
+        text-align: center;
+      }
+
+      .switcher-copy strong,
+      .switcher-copy span {
+        display: block;
+      }
+
+      .switcher-copy strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+
+      .switcher-copy span {
+        margin-top: 2px;
+        color: #aebdb5;
+        font-size: 10px;
+      }
+
+      .prototype-state {
+        position: fixed;
+        z-index: 45;
+        right: 16px;
+        bottom: 96px;
+        width: min(390px, calc(100vw - 32px));
+        max-height: 45vh;
+        overflow: auto;
+        border: 1px solid #45564d;
+        border-radius: 12px;
+        color: #d7e9df;
+        background: #101d18;
+        box-shadow: var(--shadow);
+      }
+
+      .prototype-state summary {
+        padding: 10px 12px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .prototype-state pre {
+        margin: 0;
+        padding: 0 12px 12px;
+        overflow: auto;
+        font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+      }
+
+      /* Variant A: conversation-first split workspace */
+      .variant-a {
+        min-height: calc(100vh - 100px);
+        display: grid;
+        grid-template-columns: minmax(290px, 0.85fr) minmax(440px, 1.55fr) minmax(265px, 0.72fr);
+      }
+
+      .a-conversation,
+      .a-plan,
+      .a-context {
+        min-width: 0;
+        padding: 20px;
+      }
+
+      .a-conversation {
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--line);
+        background: #f2f3ee;
+      }
+
+      .a-plan {
+        overflow: auto;
+        background: white;
+      }
+
+      .a-context {
+        border-left: 1px solid var(--line);
+        background: #f7f6f1;
+      }
+
+      .a-section-header {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+
+      .a-plan-sheet {
+        max-width: 760px;
+        margin: 0 auto;
+      }
+
+      .a-context .step-strip {
+        margin-bottom: 18px;
+      }
+
+      /* Variant B: structured plan-first desk */
+      .variant-b {
+        min-height: calc(100vh - 100px);
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        background: #eef1ec;
+      }
+
+      .b-sidebar {
+        padding: 24px 15px 130px;
+        color: #e9f4ed;
+        background: var(--forest);
+      }
+
+      .b-sidebar h2 {
+        color: white;
+        font-size: 17px;
+      }
+
+      .b-nav {
+        display: grid;
+        gap: 5px;
+        margin-top: 20px;
+      }
+
+      .b-nav button {
+        padding: 10px 11px;
+        border: 0;
+        border-radius: 9px;
+        color: #c8dbd0;
+        background: transparent;
+        text-align: left;
+      }
+
+      .b-nav button.active {
+        color: white;
+        background: rgb(255 255 255 / 12%);
+      }
+
+      .b-revisions {
+        margin-top: 28px;
+        padding-top: 18px;
+        border-top: 1px solid rgb(255 255 255 / 16%);
+      }
+
+      .b-revision {
+        position: relative;
+        margin: 0 0 14px 8px;
+        padding-left: 16px;
+        color: #bfd1c7;
+        font-size: 12px;
+      }
+
+      .b-revision::before {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 0;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #759687;
+      }
+
+      .b-revision.current {
+        color: white;
+        font-weight: 800;
+      }
+
+      .b-revision.current::before {
+        background: var(--lime);
+        box-shadow: 0 0 0 3px rgb(219 244 128 / 16%);
+      }
+
+      .b-main {
+        min-width: 0;
+        padding: 28px 28px 150px;
+      }
+
+      .b-title-row {
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 20px;
+      }
+
+      .b-title-row p {
+        max-width: 650px;
+        margin-bottom: 0;
+        color: var(--muted);
+      }
+
+      .b-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.7fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .b-plan-table {
+        padding: 22px;
+      }
+
+      .b-action-queue {
+        position: sticky;
+        top: 18px;
+      }
+
+      .b-chat-dock {
+        position: fixed;
+        z-index: 20;
+        right: 30px;
+        bottom: 92px;
+        width: min(520px, calc(100vw - 260px));
+        border: 1px solid #abc0b5;
+        border-radius: 14px;
+        background: white;
+        box-shadow: var(--shadow);
+      }
+
+      .b-chat-dock summary {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 11px 14px;
+        cursor: pointer;
+        color: var(--forest);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .b-chat-body {
+        max-height: 300px;
+        overflow: auto;
+        padding: 0 14px 14px;
+      }
+
+      /* Variant C: revision ledger / chronological flow */
+      .variant-c {
+        min-height: calc(100vh - 100px);
+        padding: 28px 28px 140px;
+        background:
+          radial-gradient(circle at top left, rgb(219 244 128 / 22%), transparent 28%),
+          #f7f2e8;
+      }
+
+      .c-hero {
+        max-width: 1180px;
+        margin: 0 auto 18px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+        gap: 18px;
+        align-items: end;
+      }
+
+      .c-hero h1 {
+        max-width: 760px;
+        font-family: Georgia, "Times New Roman", serif;
+        font-weight: 500;
+      }
+
+      .c-revision-map {
+        display: flex;
+        gap: 7px;
+        align-items: center;
+        justify-content: flex-end;
+        padding-bottom: 5px;
+      }
+
+      .c-revision-node {
+        padding: 7px 10px;
+        border: 1px solid #b7b7a9;
+        border-radius: 999px;
+        color: #6d716b;
+        background: rgb(255 255 255 / 58%);
+        font-size: 11px;
+        font-weight: 750;
+      }
+
+      .c-revision-node.current {
+        border-color: var(--forest);
+        color: white;
+        background: var(--forest);
+      }
+
+      .c-ledger {
+        max-width: 1180px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: minmax(210px, 0.52fr) minmax(420px, 1.3fr) minmax(265px, 0.68fr);
+        gap: 16px;
+        align-items: start;
+      }
+
+      .c-channel,
+      .c-record,
+      .c-decision {
+        border: 1px solid #d7d1c2;
+        border-radius: 4px;
+        background: rgb(255 255 255 / 78%);
+        box-shadow: 8px 8px 0 rgb(23 63 49 / 7%);
+      }
+
+      .c-channel,
+      .c-decision {
+        position: sticky;
+        top: 18px;
+      }
+
+      .c-channel {
+        padding: 16px;
+      }
+
+      .c-record {
+        padding: 24px;
+      }
+
+      .c-decision {
+        padding: 16px;
+      }
+
+      .c-record-header {
+        display: flex;
+        gap: 12px;
+        align-items: start;
+        justify-content: space-between;
+        padding-bottom: 17px;
+        border-bottom: 2px solid var(--ink);
+      }
+
+      .c-record-header h2 {
+        margin-bottom: 4px;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 25px;
+        font-weight: 500;
+      }
+
+      .c-day {
+        display: grid;
+        grid-template-columns: 88px minmax(0, 1fr) auto;
+        gap: 15px;
+        padding: 17px 0;
+        border-bottom: 1px solid #d7d1c2;
+      }
+
+      .c-day:last-child {
+        border-bottom: 0;
+      }
+
+      .c-day time {
+        color: var(--muted);
+        font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .c-margin-note {
+        padding: 10px;
+        border-left: 2px solid var(--forest-2);
+        color: var(--muted);
+        background: #f0eee5;
+        font-size: 11px;
+      }
+
+      .c-stage-index {
+        margin-bottom: 18px;
+        font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+        text-transform: uppercase;
+      }
+
+      .c-stage-index strong {
+        font-size: 22px;
+      }
+
+      .export-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin: 12px 0;
+      }
+
+      .export-button {
+        padding: 13px 8px;
+        border: 1px solid #9bc7b0;
+        border-radius: 10px;
+        color: var(--forest);
+        background: white;
+        font-weight: 800;
+      }
+
+      @media (max-width: 1050px) {
+        .variant-a {
+          grid-template-columns: 310px minmax(0, 1fr);
+        }
+
+        .a-context {
+          grid-column: 1 / -1;
+          border-top: 1px solid var(--line);
+          border-left: 0;
+        }
+
+        .a-context-content {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .c-ledger {
+          grid-template-columns: minmax(200px, 0.55fr) minmax(0, 1.45fr);
+        }
+
+        .c-decision {
+          position: static;
+          grid-column: 1 / -1;
+        }
+      }
+
+      @media (max-width: 800px) {
+        .app-header {
+          align-items: flex-start;
+          padding: 11px 14px;
+        }
+
+        .brand span:last-child {
+          display: none;
+        }
+
+        .variant-a,
+        .variant-b,
+        .c-hero,
+        .c-ledger,
+        .b-grid {
+          display: block;
+        }
+
+        .a-conversation,
+        .a-plan,
+        .a-context {
+          border: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .a-conversation {
+          min-height: 440px;
+        }
+
+        .a-context-content {
+          display: block;
+        }
+
+        .b-sidebar {
+          padding: 18px;
+        }
+
+        .b-nav {
+          display: flex;
+          overflow-x: auto;
+        }
+
+        .b-revisions {
+          display: none;
+        }
+
+        .b-main {
+          padding: 20px 14px 190px;
+        }
+
+        .b-action-queue {
+          position: static;
+          margin-top: 16px;
+        }
+
+        .b-chat-dock {
+          right: 12px;
+          bottom: 100px;
+          width: calc(100vw - 24px);
+        }
+
+        .variant-c {
+          padding: 22px 14px 150px;
+        }
+
+        .c-revision-map {
+          justify-content: flex-start;
+          margin: 14px 0;
+        }
+
+        .c-channel,
+        .c-decision {
+          position: static;
+          margin-bottom: 14px;
+        }
+
+        .c-record {
+          margin-bottom: 14px;
+        }
+
+        .metric-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .app-header {
+          flex-wrap: wrap;
+        }
+
+        .trip-heading {
+          order: 3;
+          flex-basis: 100%;
+        }
+
+        .diff {
+          grid-template-columns: 1fr;
+        }
+
+        .diff > span {
+          transform: rotate(90deg);
+          text-align: center;
+        }
+
+        .c-day {
+          grid-template-columns: 70px minmax(0, 1fr);
+        }
+
+        .c-day .money {
+          grid-column: 2;
+        }
+
+        .export-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="prototype-ribbon">Throwaway prototype · Issue #10 · No real bookings or mutations</div>
+    <div id="app"></div>
+    <script>
+      const variants = {
+        A: {
+          name: "Conversation-first split",
+          premise: "Keep discussion, committed plan, and exact next decision visible together.",
+        },
+        B: {
+          name: "Accepted hybrid",
+          premise: "Plan-first desk with a persistent decision queue and visible revision history.",
+        },
+        C: {
+          name: "Revision ledger",
+          premise: "Organise the workspace around provenance, change, and revision history.",
+        },
+      };
+
+      const stages = [
+        {
+          id: "answer",
+          label: "Grounded answer",
+          instruction: "The Planner asks a read-only question and checks its Evidence.",
+        },
+        {
+          id: "proposal",
+          label: "Amendment Proposal",
+          instruction: "A requested change becomes an untrusted, reviewable proposal.",
+        },
+        {
+          id: "run",
+          label: "Recomputation",
+          instruction: "Revision 7 remains current while a Run recomputes affected capabilities.",
+        },
+        {
+          id: "warning",
+          label: "Bound approval",
+          instruction: "A budget warning pauses the Run for one exact decision.",
+        },
+        {
+          id: "revision",
+          label: "Revision 8",
+          instruction: "The completed Run commits one new immutable Plan Revision.",
+        },
+        {
+          id: "handbook",
+          label: "Handbook ready",
+          instruction: "An approved revision compiles to immutable offline exports.",
+        },
+      ];
+
+      const params = new URLSearchParams(window.location.search);
+      let variant = variants[params.get("variant")] ? params.get("variant") : "B";
+      let stageIndex = Math.min(Math.max(Number(params.get("stage")) || 0, 0), stages.length - 1);
+
+      function currentRevision() {
+        return stageIndex >= 4 ? 8 : 7;
+      }
+
+      function candidateRevision() {
+        return stageIndex >= 2 && stageIndex < 4 ? "8 candidate" : null;
+      }
+
+      function syncUrl() {
+        const next = new URL(window.location.href);
+        next.searchParams.set("variant", variant);
+        next.searchParams.set("stage", String(stageIndex));
+        history.replaceState({}, "", next);
+      }
+
+      function setVariant(nextVariant) {
+        variant = nextVariant;
+        syncUrl();
+        render();
+      }
+
+      function cycleVariant(direction) {
+        const keys = Object.keys(variants);
+        const current = keys.indexOf(variant);
+        setVariant(keys[(current + direction + keys.length) % keys.length]);
+      }
+
+      function setStage(nextStage) {
+        stageIndex = Math.min(Math.max(nextStage, 0), stages.length - 1);
+        syncUrl();
+        render();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      function stageStatus(index) {
+        if (index < stageIndex) return "complete";
+        if (index === stageIndex) return "current";
+        return "";
+      }
+
+      function statusBadge() {
+        if (stageIndex === 2) return '<span class="status-badge running">● Run in progress</span>';
+        if (stageIndex === 3) return '<span class="status-badge warning">Action required</span>';
+        if (stageIndex === 5) return '<span class="status-badge success">Handbook ready</span>';
+        return '<span class="status-badge success">Current plan</span>';
+      }
+
+      function shellHeader() {
+        return `
+          <header class="app-header">
+            <div class="brand">
+              <span class="brand-mark" aria-hidden="true">FT</span>
+              <span>Flash Trips</span>
+            </div>
+            <div class="trip-heading">
+              <strong>Paris spring escape</strong>
+              <span>14–19 April 2027 · 2 travellers · Europe/Paris</span>
+            </div>
+            ${statusBadge()}
+            <span class="revision-badge">Revision ${currentRevision()}${candidateRevision() ? ` · ${candidateRevision()}` : ""}</span>
+          </header>
+        `;
+      }
+
+      function stepStrip() {
+        return `
+          <div class="step-strip" aria-label="Guided prototype stage">
+            ${stages
+              .map(
+                (stage, index) => `
+                  <button
+                    class="step-button ${stageStatus(index)}"
+                    onclick="setStage(${index})"
+                    title="${index + 1}. ${stage.label}"
+                    aria-label="Open ${stage.label}"
+                  >${stage.label}</button>
+                `,
+              )
+              .join("")}
+          </div>
+        `;
+      }
+
+      function citations() {
+        return `
+          <div class="source-card">
+            <strong>[E17] Hôtel Fabric · direct room offer</strong>
+            <span>Observed 21 Aug 2026, 18:42 CEST · €1,680 total · refundable</span>
+          </div>
+          <div class="source-card">
+            <strong>[E09] RATP route measurement</strong>
+            <span>Observed 21 Aug 2026, 18:46 CEST · 24–31 min to Musée d’Orsay</span>
+          </div>
+          <div class="source-card">
+            <strong>[E21] Musée d’Orsay official hours</strong>
+            <span>Observed 21 Aug 2026, 18:49 CEST · Thursday closes at 21:45</span>
+          </div>
+        `;
+      }
+
+      function conversationContent(compact = false) {
+        const history = `
+          <div class="message planner">
+            Would Hôtel Fabric work better for Thursday’s late museum visit?
+          </div>
+          <div class="message">
+            It would shorten the expected return from Musée d’Orsay to 24–31 minutes and
+            keeps a refundable rate. It is €240 more than the hotel in Revision 7.
+            <span class="citation">E17</span><span class="citation">E09</span><span class="citation">E21</span>
+          </div>
+        `;
+        const later =
+          stageIndex >= 1
+            ? `
+              <div class="message planner">Change the plan to Hôtel Fabric.</div>
+              <div class="message">
+                I’ve prepared an Amendment Proposal. Nothing has changed yet. Review the
+                hotel, budget, itinerary, and handbook impacts before confirming it.
+              </div>
+            `
+            : "";
+        const outcome =
+          stageIndex >= 4
+            ? `
+              <div class="message">
+                Revision 8 is now current. Hôtel Fabric is committed and the previous
+                revision remains available in history.
+              </div>
+            `
+            : "";
+        return `
+          ${history}
+          ${compact ? "" : later}
+          ${compact ? "" : outcome}
+        `;
+      }
+
+      function composer() {
+        return `
+          <div class="composer">
+            <input aria-label="Ask about this trip" placeholder="Ask about this trip…" />
+            <button class="primary" type="button" title="Disabled in prototype">Send</button>
+          </div>
+        `;
+      }
+
+      function planRows() {
+        const hotel = stageIndex >= 4 ? "Hôtel Fabric" : "Hôtel Le Six";
+        const hotelMeta =
+          stageIndex >= 4
+            ? "5 nights · refundable · Evidence E17"
+            : "5 nights · refundable · Evidence E05";
+        const hotelPrice = stageIndex >= 4 ? "€1,680" : "€1,440";
+        return `
+          <ul class="plan-list">
+            <li class="plan-row">
+              <span class="plan-icon" aria-hidden="true">✈</span>
+              <span><strong>Air France AF123</strong><small>14 Apr · London → Paris · Evidence E03</small></span>
+              <span class="money">€820</span>
+            </li>
+            <li class="plan-row">
+              <span class="plan-icon" aria-hidden="true">⌂</span>
+              <span><strong>${hotel}</strong><small>${hotelMeta}</small></span>
+              <span class="money">${hotelPrice}</span>
+            </li>
+            <li class="plan-row">
+              <span class="plan-icon" aria-hidden="true">◫</span>
+              <span><strong>Musée d’Orsay late opening</strong><small>15 Apr · 18:00–21:00 · Evidence E21</small></span>
+              <span class="money">€32</span>
+            </li>
+            <li class="plan-row">
+              <span class="plan-icon" aria-hidden="true">♨</span>
+              <span><strong>Dining & local transport</strong><small>Known and estimated costs · 2 travellers</small></span>
+              <span class="money">€1,158</span>
+            </li>
+          </ul>
+        `;
+      }
+
+      function metrics() {
+        const total = stageIndex >= 4 ? "€3,690" : "€3,450";
+        const targetStatus = stageIndex >= 4 ? "€190 over" : "€50 under";
+        return `
+          <div class="metric-grid">
+            <div class="metric"><span>Known + estimated</span><strong>${total}</strong></div>
+            <div class="metric"><span>Target €3,500</span><strong>${targetStatus}</strong></div>
+            <div class="metric"><span>Hard limit €4,000</span><strong>Within limit</strong></div>
+          </div>
+        `;
+      }
+
+      function proposalCard() {
+        return `
+          <div class="action-card attention">
+            <p class="eyebrow">Untrusted interpretation</p>
+            <h3>Amendment Proposal</h3>
+            <p class="muted">Replace the selected accommodation for all five nights.</p>
+            <div class="diff">
+              <div class="diff-box">
+                <small>Revision 7</small>
+                <strong>Hôtel Le Six</strong>
+                <span class="muted">€1,440</span>
+              </div>
+              <span aria-hidden="true">→</span>
+              <div class="diff-box new">
+                <small>Proposed</small>
+                <strong>Hôtel Fabric</strong>
+                <span class="muted">€1,680</span>
+              </div>
+            </div>
+            <div class="impact-list">
+              <div class="impact">Recompute Accommodation, Budget, and Itinerary.</div>
+              <div class="impact">Supersede Travel Plan approval for Revision 7.</div>
+              <div class="impact">Block Revision 7 handbook delivery after commit.</div>
+            </div>
+            <div class="binding">Base revision: 7 · Proposal: AP-4JQ8 · Expires if the current revision changes</div>
+            <div class="button-stack">
+              <button class="primary" onclick="setStage(2)">Confirm amendment & start Run</button>
+              <button class="secondary" onclick="setStage(0)">Revise or dismiss proposal</button>
+            </div>
+          </div>
+        `;
+      }
+
+      function runCard() {
+        return `
+          <div class="action-card">
+            <p class="eyebrow">Run R-284 · Base Revision 7</p>
+            <h3>Recomputing affected plan sections</h3>
+            <div class="progress-track" aria-label="Run progress"><div class="progress-fill"></div></div>
+            <ul class="event-list">
+              <li class="event">Accommodation validated against Evidence E17</li>
+              <li class="event">Route measurements refreshed</li>
+              <li class="event active">Budget assessment in progress</li>
+              <li class="event">Itinerary feasibility waiting</li>
+            </ul>
+            <div class="info-box">Revision 7 remains current. Partial Run results cannot replace it.</div>
+            <div class="binding">Accepted base: Revision 7 · Sequence: 14 · One active mutating Run</div>
+            <div class="button-stack">
+              <button class="primary" onclick="setStage(3)">Simulate recomputation result</button>
+              <button class="secondary" type="button">Request Run cancellation…</button>
+            </div>
+          </div>
+        `;
+      }
+
+      function warningCard() {
+        return `
+          <div class="action-card attention">
+            <p class="eyebrow">Approval Request · Budget</p>
+            <h3>Approve €190 above target?</h3>
+            <div class="warning-box">
+              The candidate total is €3,690. That is above your €3,500 Target Budget but
+              remains within the €4,000 Hard Budget Limit.
+            </div>
+            <div class="impact-list">
+              <div class="impact">Hôtel Fabric adds €240.</div>
+              <div class="impact">All other known and estimated costs are unchanged.</div>
+              <div class="impact">No unpriced required items remain.</div>
+            </div>
+            <div class="binding">Request AR-B19 · Run R-284 · Candidate Revision 8 · Reviewed facts fp…71c</div>
+            <div class="button-stack">
+              <button class="primary" onclick="setStage(4)">Approve exact warning & continue</button>
+              <button class="secondary" onclick="setStage(1)">Reject and request changes</button>
+            </div>
+            <p class="muted" style="margin: 10px 0 0; font-size: 11px">
+              Typing “yes” in conversation does not approve this request.
+            </p>
+          </div>
+        `;
+      }
+
+      function revisionCard() {
+        return `
+          <div class="action-card">
+            <p class="eyebrow">Committed Plan Revision</p>
+            <h3>Revision 8 is current</h3>
+            <div class="success-box">The Run committed one complete revision. Revision 7 remains immutable in history.</div>
+            <div class="impact-list">
+              <div class="impact">Hôtel Fabric selected with Evidence E17.</div>
+              <div class="impact">Budget warning approval recorded for Revision 8.</div>
+              <div class="impact">Travel Plan Approval is still required.</div>
+            </div>
+            <div class="binding">Revision 8 · Created by Plan Amendment PA-91 · Run R-284</div>
+            <div class="button-stack">
+              <button class="primary" onclick="setStage(5)">Approve Travel Plan & compile handbook</button>
+              <button class="secondary" onclick="setStage(1)">Propose another amendment</button>
+            </div>
+          </div>
+        `;
+      }
+
+      function handbookCard() {
+        return `
+          <div class="action-card">
+            <p class="eyebrow">Handbook Snapshot HS-8KF2</p>
+            <h3>Offline handbook ready</h3>
+            <div class="success-box">Compiled from approved Revision 8 and its exact Evidence snapshot.</div>
+            <div class="export-grid">
+              <button class="export-button" type="button">HTML</button>
+              <button class="export-button" type="button">Markdown</button>
+              <button class="export-button" type="button">JSON</button>
+            </div>
+            <div class="binding">Revision 8 · Snapshot HS-8KF2 · Checksum 4cc7…d20 · Immutable</div>
+            <div class="button-stack">
+              <button class="primary" type="button">Open printable HTML</button>
+              <button class="secondary" onclick="setStage(0)">Restart guided scenario</button>
+            </div>
+          </div>
+        `;
+      }
+
+      function answerCard() {
+        return `
+          <div class="action-card">
+            <p class="eyebrow">Grounded answer · Revision 7</p>
+            <h3>Why this answer is safe to use</h3>
+            <p class="muted">The response is read-only. It distinguishes the committed hotel from current observations.</p>
+            ${citations()}
+            <div class="button-stack" style="margin-top: 12px">
+              <button class="primary" onclick="setStage(1)">Ask to change the hotel</button>
+              <button class="secondary" type="button">Refresh Evidence only</button>
+            </div>
+          </div>
+        `;
+      }
+
+      function activeAction() {
+        return [answerCard, proposalCard, runCard, warningCard, revisionCard, handbookCard][stageIndex]();
+      }
+
+      function revisionHistory() {
+        return `
+          <ul class="revision-list">
+            ${
+              stageIndex >= 4
+                ? `
+                  <li class="plan-row">
+                    <span class="plan-icon">8</span>
+                    <span><strong>Hôtel Fabric amendment</strong><small>Current · 21 Aug 2026</small></span>
+                    <span class="chip success">Current</span>
+                  </li>
+                `
+                : ""
+            }
+            <li class="plan-row">
+              <span class="plan-icon">7</span>
+              <span><strong>Dining and activity refinements</strong><small>${stageIndex >= 4 ? "Superseded" : "Current"} · 19 Aug 2026</small></span>
+              <span class="chip">${stageIndex >= 4 ? "History" : "Current"}</span>
+            </li>
+            <li class="plan-row">
+              <span class="plan-icon">6</span>
+              <span><strong>Initial complete plan</strong><small>Superseded · 18 Aug 2026</small></span>
+              <span class="chip">History</span>
+            </li>
+          </ul>
+        `;
+      }
+
+      function variantA() {
+        return `
+          ${shellHeader()}
+          <main class="variant-a">
+            <section class="a-conversation" aria-label="Trip conversation">
+              <div class="a-section-header">
+                <div><p class="eyebrow">Trip Workspace</p><h2>Conversation</h2></div>
+                <span class="chip">Revision ${currentRevision()}</span>
+              </div>
+              <div>${conversationContent()}</div>
+              ${composer()}
+            </section>
+            <section class="a-plan" aria-label="Structured Travel Plan">
+              <div class="a-plan-sheet">
+                <div class="a-section-header">
+                  <div><p class="eyebrow">Committed state</p><h2>Travel Plan</h2></div>
+                  <span class="muted" style="font-size: 12px">Last validated 21 Aug 2026</span>
+                </div>
+                <div class="tabs">
+                  <button class="tab active">Overview</button>
+                  <button class="tab">Schedule</button>
+                  <button class="tab">Budget</button>
+                  <button class="tab">Readiness</button>
+                  <button class="tab">Evidence</button>
+                  <button class="tab">History</button>
+                </div>
+                <div style="padding: 18px 0">${metrics()}</div>
+                <div class="panel panel-pad">
+                  <h3>Selected plan</h3>
+                  ${planRows()}
+                </div>
+                <div class="panel panel-pad" style="margin-top: 14px">
+                  <div class="a-section-header">
+                    <h3 style="margin: 0">Plan Revision history</h3>
+                    <button class="ghost">Compare</button>
+                  </div>
+                  ${revisionHistory()}
+                </div>
+              </div>
+            </section>
+            <aside class="a-context" aria-label="Contextual action">
+              ${stepStrip()}
+              <p class="eyebrow">Now · ${stageIndex + 1} of ${stages.length}</p>
+              <h2>${stages[stageIndex].label}</h2>
+              <p class="muted" style="font-size: 13px">${stages[stageIndex].instruction}</p>
+              <div class="a-context-content">${activeAction()}</div>
+            </aside>
+          </main>
+        `;
+      }
+
+      function bRevisionTimeline() {
+        return `
+          <div class="b-revisions">
+            <p class="eyebrow" style="color: #9fb7aa">Revision history</p>
+            ${stageIndex >= 4 ? '<div class="b-revision current">Revision 8<br /><small>Hotel amendment</small></div>' : ""}
+            <div class="b-revision ${stageIndex < 4 ? "current" : ""}">Revision 7<br /><small>Dining refined</small></div>
+            <div class="b-revision">Revision 6<br /><small>First complete plan</small></div>
+          </div>
+        `;
+      }
+
+      function variantB() {
+        return `
+          ${shellHeader()}
+          <main class="variant-b">
+            <aside class="b-sidebar">
+              <p class="eyebrow" style="color: #a9c5b7">Plan desk</p>
+              <h2>Paris spring escape</h2>
+              <nav class="b-nav" aria-label="Travel Plan sections">
+                <button class="active">Overview</button>
+                <button>Schedule</button>
+                <button>Air & stays</button>
+                <button>Budget</button>
+                <button>Readiness</button>
+                <button>Evidence</button>
+                <button>Handbook</button>
+              </nav>
+              ${bRevisionTimeline()}
+            </aside>
+            <section class="b-main">
+              <div class="b-title-row">
+                <div>
+                  <p class="eyebrow">Travel Plan · Revision ${currentRevision()}</p>
+                  <h1>Five days in Paris,<br />grounded and ready to review.</h1>
+                  <p>The plan is the centre of this workspace. Conversation stays available without becoming the source of truth.</p>
+                </div>
+                <div class="button-stack">
+                  <span class="chip success">Accepted direction</span>
+                  <span class="revision-badge">Revision ${currentRevision()}</span>
+                </div>
+              </div>
+              <div class="b-grid">
+                <div>
+                  <section class="panel b-plan-table">
+                    ${metrics()}
+                    <div style="margin-top: 18px">${planRows()}</div>
+                  </section>
+                  <section class="panel panel-pad" style="margin-top: 18px">
+                    <div class="a-section-header">
+                      <div><p class="eyebrow">Provenance</p><h2>Evidence behind the plan</h2></div>
+                      <button class="secondary">View all 24 sources</button>
+                    </div>
+                    ${citations()}
+                  </section>
+                </div>
+                <aside class="b-action-queue" aria-label="Decision queue">
+                  ${stepStrip()}
+                  <div style="height: 12px"></div>
+                  <p class="eyebrow">Decision queue · ${stageIndex + 1}/${stages.length}</p>
+                  ${activeAction()}
+                </aside>
+              </div>
+            </section>
+          </main>
+          <details class="b-chat-dock" ${stageIndex <= 1 ? "open" : ""}>
+            <summary>◉ Ask about Revision ${currentRevision()} <span class="chip">${stageIndex <= 1 ? "Grounded answer" : "Conversation dock"}</span></summary>
+            <div class="b-chat-body">
+              ${conversationContent(true)}
+              ${composer()}
+            </div>
+          </details>
+        `;
+      }
+
+      function cDays() {
+        const hotel = stageIndex >= 4 ? "Hôtel Fabric" : "Hôtel Le Six";
+        return `
+          <div class="c-day">
+            <time>WED 14<br />APR</time>
+            <div><strong>Arrive and settle in</strong><p class="muted">Air France AF123 · Check in at ${hotel}</p></div>
+            <span class="money">€${stageIndex >= 4 ? "2,500" : "2,260"}</span>
+          </div>
+          <div class="c-day">
+            <time>THU 15<br />APR</time>
+            <div>
+              <strong>Left Bank and Musée d’Orsay</strong>
+              <p class="muted">Late opening · 18:00–21:00</p>
+              <div class="c-margin-note">Return to ${hotel}: ${stageIndex >= 4 ? "24–31" : "34–42"} min · Evidence E09</div>
+            </div>
+            <span class="money">€196</span>
+          </div>
+          <div class="c-day">
+            <time>FRI–SUN<br />16–18</time>
+            <div><strong>Markets, neighbourhoods, and dining</strong><p class="muted">Validated opening constraints and route times</p></div>
+            <span class="money">€814</span>
+          </div>
+          <div class="c-day">
+            <time>MON 19<br />APR</time>
+            <div><strong>Departure</strong><p class="muted">Hotel → CDG · route allowance included</p></div>
+            <span class="money">€180</span>
+          </div>
+        `;
+      }
+
+      function variantC() {
+        return `
+          ${shellHeader()}
+          <main class="variant-c">
+            <section class="c-hero">
+              <div>
+                <p class="eyebrow">Revision ledger · Paris spring escape</p>
+                <h1>Every answer has a source. Every change leaves a trace.</h1>
+              </div>
+              <div class="c-revision-map" aria-label="Revision map">
+                <span class="c-revision-node">Rev 6</span><span aria-hidden="true">→</span>
+                <span class="c-revision-node ${stageIndex < 4 ? "current" : ""}">Rev 7</span>
+                ${stageIndex >= 1 ? '<span aria-hidden="true">→</span>' : ""}
+                ${
+                  stageIndex >= 4
+                    ? '<span class="c-revision-node current">Rev 8</span>'
+                    : stageIndex >= 1
+                      ? '<span class="c-revision-node">Proposed 8</span>'
+                      : ""
+                }
+              </div>
+            </section>
+            <section class="c-ledger">
+              <aside class="c-channel" aria-label="Conversation channel">
+                <p class="eyebrow">Conversation channel</p>
+                ${conversationContent(true)}
+                <button class="secondary" style="width: 100%" onclick="setStage(1)">Turn this into a proposal</button>
+                <div style="margin-top: 14px">
+                  <p class="eyebrow">Citations in view</p>
+                  ${citations()}
+                </div>
+              </aside>
+              <article class="c-record" aria-label="Current plan record">
+                <header class="c-record-header">
+                  <div>
+                    <p class="eyebrow">Travel Plan record</p>
+                    <h2>Revision ${currentRevision()}</h2>
+                    <span class="muted">14–19 April 2027 · 2 travellers</span>
+                  </div>
+                  ${statusBadge()}
+                </header>
+                <div style="padding: 18px 0; border-bottom: 1px solid #d7d1c2">${metrics()}</div>
+                ${cDays()}
+                <div style="padding-top: 18px">
+                  <p class="eyebrow">Earlier records</p>
+                  ${revisionHistory()}
+                </div>
+              </article>
+              <aside class="c-decision" aria-label="Current ledger event">
+                <div class="c-stage-index">
+                  <strong>0${stageIndex + 1}</strong> / 0${stages.length}<br />
+                  ${stages[stageIndex].label}
+                </div>
+                ${stepStrip()}
+                <p class="muted" style="margin: 14px 0; font-size: 12px">${stages[stageIndex].instruction}</p>
+                ${activeAction()}
+              </aside>
+            </section>
+          </main>
+        `;
+      }
+
+      function fullState() {
+        const state = {
+          prototype: "issue-10",
+          variant: `${variant} — ${variants[variant].name}`,
+          stage: `${stageIndex + 1}/${stages.length} — ${stages[stageIndex].id}`,
+          conversationScope: "Trip Workspace",
+          trip: "Paris spring escape",
+          visiblePlanRevision: currentRevision(),
+          canonicalPlanRevision: currentRevision(),
+          amendmentProposal:
+            stageIndex === 1 ? { id: "AP-4JQ8", trusted: false, baseRevision: 7 } : null,
+          activeRun:
+            stageIndex === 2 || stageIndex === 3
+              ? { id: "R-284", baseRevision: 7, candidateRevision: 8, terminal: false }
+              : null,
+          pendingApproval:
+            stageIndex === 3
+              ? { id: "AR-B19", kind: "budget-warning", boundTo: "R-284 / candidate 8 / fp…71c" }
+              : stageIndex === 4
+                ? { kind: "travel-plan", boundTo: "Revision 8" }
+                : null,
+          revalidationRequired: false,
+          handbook:
+            stageIndex === 5
+              ? { snapshot: "HS-8KF2", revision: 8, exports: ["HTML", "Markdown", "JSON"] }
+              : { eligible: false },
+        };
+        return JSON.stringify(state, null, 2);
+      }
+
+      function prototypeChrome() {
+        return `
+          <details class="prototype-state">
+            <summary>Inspect full prototype state</summary>
+            <pre>${fullState()}</pre>
+          </details>
+          <nav class="prototype-switcher" aria-label="Prototype variant switcher">
+            <button class="icon-button" onclick="cycleVariant(-1)" aria-label="Previous variant">←</button>
+            <div class="switcher-copy">
+              <strong>${variant} — ${variants[variant].name}</strong>
+              <span>${variants[variant].premise} · Use ← → to switch</span>
+            </div>
+            <button class="icon-button" onclick="cycleVariant(1)" aria-label="Next variant">→</button>
+          </nav>
+        `;
+      }
+
+      function render() {
+        const layout = variant === "A" ? variantA() : variant === "B" ? variantB() : variantC();
+        document.getElementById("app").innerHTML = layout + prototypeChrome();
+      }
+
+      document.addEventListener("keydown", (event) => {
+        const target = event.target;
+        const typing =
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement ||
+          target?.isContentEditable;
+        if (typing) return;
+        if (event.key === "ArrowLeft") cycleVariant(-1);
+        if (event.key === "ArrowRight") cycleVariant(1);
+      });
+
+      syncUrl();
+      render();
+    </script>
+  </body>
+</html>
