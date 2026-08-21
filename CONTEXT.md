@@ -80,9 +80,21 @@ _Avoid_: Chat response, draft blob, saved output
 The delivery artefact derived from an approved travel plan for the planner to use during the trip.
 _Avoid_: AI response, report, itinerary
 
+**Handbook Document**:
+The schema-versioned, format-neutral semantic content compiled from an eligible plan revision for deterministic handbook rendering.
+_Avoid_: JSON handbook, renderer output, mutable report
+
 **Handbook Snapshot**:
-An immutable trip-handbook artefact bound to one plan revision, evidence snapshot, policy set, and renderer version.
+An immutable trip-handbook artefact bound to one plan revision, its exact qualifying approvals, evidence snapshot, policy set, and compilation and rendering versions.
 _Avoid_: Latest handbook, mutable report
+
+**Handbook Export**:
+An immutable format-specific projection of a handbook snapshot delivered for offline use without becoming authoritative planning input.
+_Avoid_: Editable handbook, source document, plan import
+
+**Handbook Delivery**:
+An authorised retrieval of one handbook export by the owning planner, recorded for audit without constituting approval or proof that the export was opened.
+_Avoid_: Handbook approval, view confirmation, public share
 
 **Evidence**:
 Sourced information supporting a travel claim or choice, bounded by its origin, observed time, and applicable trip scope.
