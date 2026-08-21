@@ -104,6 +104,10 @@ _Avoid_: Context, search result, knowledge
 A derived condition indicating that a committed plan revision or handbook can no longer support new delivery because relevant inputs, evidence, or policy no longer satisfy current validation.
 _Avoid_: Deleted, automatically invalid
 
+**Provider Market Profile**:
+A versioned statement of the bounded roles, markets, modes, date horizons, and currencies for which an external provider is eligible to serve a capability.
+_Avoid_: Global support, assumed coverage, provider availability
+
 **Provider Observation**:
 A source-specific, time-bounded external result received from a travel or information provider before domain validation establishes whether it may support a travel plan.
 _Avoid_: Provider result, raw fact, recommendation
@@ -131,6 +135,10 @@ _Avoid_: Candidate, model choice, search result
 **Travel Readiness**:
 The evidence-backed assessment of destination safety advisories, health notices, and weather risks that may affect a trip, excluding personalised immigration, legal, or medical advice.
 _Avoid_: Safety agent, readiness subagent
+
+**Advisory Authority**:
+An official government or public-health source explicitly selected for a planner or companion whose audience-specific travel advice remains distinct from global, regional, and other authorities.
+_Avoid_: Inferred nationality, default country, universal advisory
 
 **Route Measurement**:
 Evidence-backed travel distance and duration between two trip locations for a stated mode and observation time.
