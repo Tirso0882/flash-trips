@@ -31,7 +31,7 @@ A Critical Evaluation Failure is an individual correctness, safety, grounding, a
 
 Evaluation outcomes distinguish valid `passed` and `failed` assessments from `blocked_external` provider, quota, or approved-access failures and `invalid_evaluation` judge, evaluator, fixture, schema, or evidence failures. Blocked and invalid runs do not assess product quality and cannot become baselines. A non-critical threshold exception must be time-bounded and record its cases, risk, compensating controls, owner, and expiry without changing the baseline or rubric.
 
-Mandatory resumability cases cover interruption before and after external dispatch, matching and mismatched checkpoints, persistence outage, Approval Gate pause, expiry and supersession, duplicate command delivery, late results, SSE reconnection, linked retry, cancellation, and attempts to reopen a terminal Run. Every case verifies canonical state, cost lineage, and Inspection Records. Critical, ambiguous, and known-regression semantic cases run at least three independent repetitions; the broader corpus runs once, with variance and confidence intervals reported.
+Mandatory resumability cases cover interruption before and after external dispatch, matching and mismatched checkpoints, persistence outage, Approval Gate pause, Approval expiry and supersession, Run-blocking context change, duplicate command delivery, late results, SSE reconnection, linked retry, cancellation, and attempts to reopen a terminal Run. Every case verifies canonical state, cost lineage, and Inspection Records. Critical, ambiguous, and known-regression semantic cases run at least three independent repetitions; the broader corpus runs once, with variance and confidence intervals reported.
 
 ## Authorization and release
 

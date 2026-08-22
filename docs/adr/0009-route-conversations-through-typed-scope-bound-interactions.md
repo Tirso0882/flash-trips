@@ -1,6 +1,6 @@
 # Route conversations through typed, scope-bound interactions
 
-Flash Trips will treat conversation as a transport façade over explicit Conversation Scopes and typed handlers, not as an autonomous authority over Trips. Every Turn belongs to `Guest General`, `Authenticated General`, `Trip Intake`, or a `Trip Workspace` bound to one Trip and visible Plan Revision. Neither a model nor conversational text may infer ownership, silently select or switch a Trip, mutate canonical state, approve a decision, or choose a workflow transition.
+Flash Trips will treat conversation as a transport façade over explicit Conversation Scopes and typed handlers, not as an autonomous authority over Trips. Every enabled Turn belongs to `Authenticated General`, `Trip Intake`, or a `Trip Workspace` bound to one Trip and visible Plan Revision. `Guest General` remains a reserved future scope but is deferred, together with Guest Session and Guest Intake Transfer, from the invitation-only release. Neither a model nor conversational text may infer ownership, silently select or switch a Trip, mutate canonical state, approve a decision, or choose a workflow transition.
 
 ## Routing
 
@@ -18,7 +18,7 @@ Handlers receive minimal category-specific context. Canonical records, the visib
 
 Externally verifiable travel claims require applicable current Evidence and citations, including safety, health, weather, prices, availability, opening constraints, and routes. Trip-grounded answers identify the visible Plan Revision and distinguish committed facts from current observations. Greetings, clarification prompts, application help, and Run-status descriptions do not require external citations. Missing, stale, contradictory, or out-of-scope Evidence produces a limitation or a typed refresh action, never an answer from model memory.
 
-A grounded question authorises only the route's predeclared read-only lookups within the later model and external-cost policy. It never authorises inventory planning or canonical mutation, and Guest Sessions cannot perform inventory searches. When new validated Evidence contradicts committed information, the Plan Revision remains immutable; deterministic policy may derive `Revalidation Required`, invalidate affected delivery eligibility or approvals, and offer a refresh Run or Plan Amendment.
+A grounded question authorises only the route's predeclared read-only lookups within the later model and external-cost policy. It never authorises inventory planning or canonical mutation. If Guest Sessions are later enabled, they cannot perform inventory searches. When new validated Evidence contradicts committed information, the Plan Revision remains immutable; deterministic policy may derive `Revalidation Required`, invalidate affected delivery eligibility or approvals, and offer a refresh Run or Plan Amendment.
 
 ## Interaction safeguards
 
@@ -28,7 +28,7 @@ An Amendment Proposal expires when its base revision changes and is never silent
 
 Free-text agreement, rejection, cancellation, or dismissal never creates an authoritative action. Approval and rejection require a bound action identifying the exact Approval Request and reviewed fingerprint. Conditional approval is not Approval. Only one state-changing decision interaction is presented at a time per Trip; canonical Approval Requests are exposed in deterministic order. Requesting changes first closes the exact Approval Request, then begins a separately confirmed amendment flow.
 
-Natural language may propose starting, opening, or switching a Trip, but the transition requires explicit confirmation. Similarly, a bound action may dismiss a Pending Clarification or unconfirmed proposal, while cancellation of an active Run requires confirmation bound to that Run and never deletes the Trip or rolls back a Plan Revision. Guest conversation content remains non-authoritative after sign-in and must be explicitly confirmed into Trip Intake.
+Natural language may propose starting, opening, or switching a Trip, but the transition requires explicit confirmation. Similarly, a bound action may dismiss a Pending Clarification or unconfirmed proposal, while cancellation of an active Run requires confirmation bound to that Run and never deletes the Trip or rolls back a Plan Revision. If the deferred Guest surface is later enabled, its conversation content remains non-authoritative after sign-in and must be explicitly confirmed into Trip Intake.
 
 Unsupported booking, payment, cancellation, reservation, disruption, immigration, legal, medical, and other high-risk requests return a typed boundary response and supported alternatives without invoking a planning workflow. Imminent-safety language uses deterministic escalation content and official emergency sources while stating that Flash Trips is not an emergency service.
 

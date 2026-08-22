@@ -26,7 +26,7 @@ Resource policy is enforced outside the executor. Definitions declare deadlines 
 
 `Blocked` reason codes describe valid bounded execution that cannot proceed because required inputs, valid Evidence, eligible inventory, or satisfiable constraints are absent. `Failed` reason codes describe exhausted technical dependencies, contract violations, invalid output, or implementation defects. Retries are permitted only for explicitly allowlisted transient failures, use bounded attempts and idempotency keys, and preserve the original inputs. Fallbacks must be versioned, explicitly ordered, and subject to equivalent validation and Evidence requirements; they cannot silently weaken constraints or policy.
 
-Every attempt has a deterministic execution identifier and idempotency key. Executors perform no side effects beyond declared provider reads. Results arriving after cancellation or Run supersession are recorded for diagnosis but cannot reach canonical commit.
+Every attempt has a deterministic execution identifier and idempotency key. Executors perform no side effects beyond declared provider reads. Results arriving after cancellation or after the Run is blocked because its context changed are recorded for diagnosis but cannot reach canonical commit.
 
 Execution records include capability and attempt identifiers, fingerprints and versions, dependency decisions, redacted input and output hashes, Evidence references, validator decisions, timing, retries, fallbacks, usage and cost, and terminal reason codes. They exclude secrets and unnecessary personal data. These records allow `RunInspector` to reconstruct why each capability executed, was skipped or reused, and how it reached its outcome.
 
