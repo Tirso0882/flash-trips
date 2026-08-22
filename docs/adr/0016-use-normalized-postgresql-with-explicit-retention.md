@@ -12,7 +12,7 @@ Storage has three explicit classes:
 - **Small mutable controls** include Trip heads and control versions, Run state and leases, Planner Access Status, sessions, and outbox delivery state. Required lifecycle history is also recorded append-only.
 - **Disposable execution records** include Execution Checkpoints, proposals, Provisional Selections, rejected Provider Observations, and other transient artefacts. Canonical tables never reference them. Acceptance inserts a new canonical identity with source lineage, validator and policy versions, and an accepted Fingerprint; a transient row is never promoted in place.
 
-A Trip always has a non-null owning Planner. External Identities map to application-owned Planners. Guest Sessions form a separate ownership root and cannot own Trips, revisions, Evidence, Approvals, or handbooks. Guest Intake Transfer atomically copies selected details into a new authenticated Trip Request and marks the transfer consumed without changing ownership of guest records.
+A Trip always has a non-null owning Planner. External Identities map to application-owned Planners. Guest Session and Guest Intake Transfer storage are deferred from the invitation-only release and need not exist in its initial schema. If later introduced, Guest Sessions form a separate ownership root and cannot own Trips, revisions, Evidence, Approvals, or handbooks; Guest Intake Transfer atomically copies selected details into a new authenticated Trip Request and marks the transfer consumed without changing ownership of guest records.
 
 Each Plan Revision is a complete immutable normalized snapshot with a sequential Trip-local revision number and base-revision reference. Current truth is not reconstructed from amendment deltas. Composite Trip-scoped references prevent cross-Trip attachment.
 
@@ -50,7 +50,7 @@ Trips remain until explicit deletion or 24 months after the later of travel comp
 
 Initial retention limits are:
 
-- Guest content follows the accepted 24-hour inactivity and seven-day absolute limits; transferred content is purged within 24 hours.
+- If the deferred Guest surface is introduced, Guest content follows the accepted 24-hour inactivity and seven-day absolute limits; transferred content is purged within 24 hours.
 - Checkpoints remain while resumable and for seven days after a terminal Run.
 - Unaccepted observations and transient Run artefacts remain for 30 days.
 - Idempotency receipts remain for 30 days after completion; delivered outbox rows remain for seven days.
