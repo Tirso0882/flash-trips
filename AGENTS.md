@@ -6,7 +6,7 @@ Issues and specs are tracked in GitHub Issues for `Tirso0882/flash-trips`. See `
 
 ### Triage labels
 
-Use the five default triage labels. See `docs/agents/triage-labels.md`.
+This repository uses the five default triage labels. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
