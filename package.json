@@ -2,6 +2,11 @@
   "name": "flash-trips",
   "private": true,
   "scripts": {
-    "prototype:planner": "python3 -m http.server 4173 --directory docs/prototypes"
+    "prototype:planner": "python3 -m http.server 4173 --directory docs/prototypes",
+    "sandcastle": "npx tsx .sandcastle/main.mts"
+  },
+  "dependencies": {
+    "@ai-hero/sandcastle": "^0.12.0",
+    "zod": "^4.5.2"
   }
 }
