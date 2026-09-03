@@ -1,0 +1,1 @@
+"""Dining capability boundary."""

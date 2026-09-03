@@ -2,11 +2,33 @@
   "name": "flash-trips",
   "private": true,
   "scripts": {
+    "contracts": "uv run python scripts/generate_openapi.py && openapi-ts -i contracts/openapi/openapi.json -o contracts/ts/src -c @hey-api/client-fetch",
     "prototype:planner": "python3 -m http.server 4173 --directory docs/prototypes",
-    "sandcastle": "npx tsx .sandcastle/main.mts"
+    "sandcastle": "pnpm exec tsx .sandcastle/main.mts",
+    "traceability": "node scripts/traceability.mjs",
+    "test:traceability": "node --test tests/traceability/traceability.test.mjs",
+    "test:web-boundaries": "node --import ./tests/node/deny-network.mjs --test tests/web/boundaries.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.33.2",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "unrs-resolver"
+    ],
+    "overrides": {
+      "js-yaml": "4.3.1"
+    }
   },
   "dependencies": {
     "@ai-hero/sandcastle": "^0.12.0",
     "zod": "^4.5.2"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.99.0",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3"
   }
 }
