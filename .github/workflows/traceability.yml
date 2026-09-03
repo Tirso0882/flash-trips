@@ -1,0 +1,33 @@
+name: Traceability
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  traceability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      LIVE_CALL_ALLOWANCE: "0"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate requirements and generated coverage
+        run: npm run traceability
+
+      - name: Run negative validator tests
+        run: npm run test:traceability

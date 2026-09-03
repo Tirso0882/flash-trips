@@ -3,7 +3,9 @@
   "private": true,
   "scripts": {
     "prototype:planner": "python3 -m http.server 4173 --directory docs/prototypes",
-    "sandcastle": "npx tsx .sandcastle/main.mts"
+    "sandcastle": "npx tsx .sandcastle/main.mts",
+    "traceability": "node scripts/traceability.mjs",
+    "test:traceability": "node --test tests/traceability/traceability.test.mjs"
   },
   "dependencies": {
     "@ai-hero/sandcastle": "^0.12.0",
