@@ -1,0 +1,1 @@
+"""Itinerary capability boundary."""

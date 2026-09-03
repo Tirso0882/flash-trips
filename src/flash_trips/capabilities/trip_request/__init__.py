@@ -1,0 +1,1 @@
+"""Trip Request capability boundary."""
