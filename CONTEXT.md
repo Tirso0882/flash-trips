@@ -205,11 +205,11 @@ A typed planner-authorised change that loosens a stated trip preference or const
 _Avoid_: Silent fallback, automatic compromise
 
 **Approval**:
-A planner's recorded decision on a specific proposed change, warning, budget, travel plan, or handbook delivery, bound to the exact revision and facts reviewed.
+A planner's recorded decision on a specific proposed change, warning, budget, uncommitted planning result, or committed handbook delivery, bound to the exact subject and facts reviewed.
 _Avoid_: Confirmation message, conversational yes
 
 **Approval Request**:
-The immutable, bounded decision presented to the planner, identifying the exact revision, evidence, warning, or proposed result to approve or reject.
+The immutable, bounded decision presented to the planner. Before planning commit it identifies an uncommitted proposed result, accepted base Plan Revision, Evidence, and policy. After commit it identifies a committed Plan Revision and the eligible Handbook snapshot inputs for delivery.
 _Avoid_: Prompt for confirmation, chat question
 
 **Paid Execution Authorization**:
