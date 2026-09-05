@@ -258,6 +258,10 @@
       "location": "https://github.com/Tirso0882/flash-trips/issues/232"
     },
     {
+      "id": "ISSUE-235",
+      "location": "https://github.com/Tirso0882/flash-trips/issues/235"
+    },
+    {
       "id": "ISSUE-40",
       "location": "https://github.com/Tirso0882/flash-trips/issues/40"
     }
@@ -354,6 +358,10 @@
     {
       "id": "E-ID",
       "source": "ISSUE-117"
+    },
+    {
+      "id": "E-SCAFFOLD",
+      "source": "ISSUE-235"
     },
     {
       "id": "E-PLACES-ROUTES",
@@ -3269,6 +3277,19 @@
         {
           "disposition": "enabler_ticket",
           "owner": "E-ID"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "E-SCAFFOLD",
+      "kind": "enabler",
+      "text": "Produce the installable application scaffold and enforced quality gates that let Slice 1 implementation begin inside the approved capability-oriented modular-monolith boundaries. The evidence must prove generated API contracts, real-PostgreSQL integration, dependency rules, hermetic tests and buildable API/web images before feature tickets add product behavior.",
+      "source": "ISSUE-235",
+      "ownership": [
+        {
+          "disposition": "enabler_ticket",
+          "owner": "E-SCAFFOLD"
         }
       ],
       "references": []

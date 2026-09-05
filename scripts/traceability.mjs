@@ -81,6 +81,7 @@ const expectedRequirementIds = {
     "E-READINESS",
     "E-REASONING",
     "E-RECOVERY",
+    "E-SCAFFOLD",
     "E-WX",
   ],
 };

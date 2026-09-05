@@ -1,0 +1,1 @@
+"""Trip Structure capability boundary."""
