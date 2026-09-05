@@ -74,6 +74,10 @@
       "location": "docs/adr/0018-route-reasoning-deterministically-and-reserve-external-cost.md"
     },
     {
+      "id": "ADR-0019-SOURCE",
+      "location": "docs/adr/0019-stage-security-controls-by-pilot-cohort.md"
+    },
+    {
       "id": "ISSUE-115",
       "location": "https://github.com/Tirso0882/flash-trips/issues/115"
     },
@@ -338,6 +342,10 @@
     {
       "id": "ADR-0018",
       "source": "ADR-0018-SOURCE"
+    },
+    {
+      "id": "ADR-0019",
+      "source": "ADR-0019-SOURCE"
     },
     {
       "id": "E-ACCEPTANCE",
@@ -3152,6 +3160,19 @@
       "references": []
     },
     {
+      "id": "ADR-0019",
+      "kind": "adr",
+      "text": "Stage security controls by pilot cohort",
+      "source": "ADR-0019-SOURCE",
+      "ownership": [
+        {
+          "disposition": "decision_record",
+          "owner": "ADR-0019"
+        }
+      ],
+      "references": []
+    },
+    {
       "id": "E-DECISIONS",
       "kind": "enabler",
       "text": "Produce one reviewed, internally consistent normative baseline and a machine-checkable traceability contract before implementation tasks rely on conflicting ADR text. The evidence must identify the authoritative clause for every reconciled rule and preserve the resolution history without silently rewriting prior decisions.",
@@ -3271,7 +3292,7 @@
     {
       "id": "E-ID",
       "kind": "enabler",
-      "text": "Produce disposable, provider-neutral pass/fail evidence that Entra External ID can satisfy the complete pilot identity contract. Select Auth0 behind the same OIDC port if any correctness or security requirement requires unstable Entra functionality or disproportionate workarounds.",
+      "text": "Produce provider-neutral pass/fail evidence that Entra External ID can satisfy the pilot identity boundary: exact-audience token validation, exact (issuer, subject) resolution, principal-scoped ownership, and the revocable server-side application session. Select Auth0 behind the same OIDC port if any correctness or security requirement requires unstable Entra functionality or disproportionate workarounds. Under ADR 0019 the identity administration lifecycle stays with FT-01 and FT-02 and is gated at the ten-Planner cohort rather than at the single-Planner specialist evaluation.",
       "source": "ISSUE-117",
       "ownership": [
         {

@@ -9,7 +9,6 @@
 *.log
 
 # Python environments and caches
-.trips/
 .venv/
 venv/
 __pycache__/
