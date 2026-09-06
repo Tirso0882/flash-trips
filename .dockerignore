@@ -7,5 +7,7 @@ docs
 tests
 .env
 .env.*
+.secrets/
 !.env.example
 *.log
+docs/personal-docs/

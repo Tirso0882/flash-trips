@@ -6,10 +6,10 @@
 .env
 .env.*
 !.env.example
+.secrets/
 *.log
 
 # Python environments and caches
-.trips/
 .venv/
 venv/
 __pycache__/
@@ -35,3 +35,7 @@ docs/personal-docs/
 
 # Lock files
 skills-lock.json
+
+# Local files
+scripts/publish-via-github-api.sh
+scripts/wizard-entra-external-id.sh
