@@ -20,9 +20,13 @@ Provider Observations are immutable and Run-scoped. Acceptance creates separate 
 
 An Approval Request is immutable and has at most one immutable terminal resolution: approved, rejected, expired, or superseded. Pending means no resolution exists. Later context changes affect derived validity without rewriting the historical request or decision.
 
+Pre-commit planning Approval Requests represent uncommitted proposed results and persist the proposed-result Fingerprint, accepted base Plan Revision, exact Evidence, and policy. They do not reference an uncommitted result as a Plan Revision. Post-commit Handbook delivery Approval Requests represent an already committed Plan Revision and persist that revision plus the exact eligible snapshot inputs. The distinct subjects and bindings are enforced as separate record kinds and typed actions.
+
 Handbook storage separates the immutable snapshot manifest, schema-versioned canonical document, exact format-specific export bytes, checksums, and delivery records. Snapshot Fingerprints deduplicate equivalent output; no mutable `latest handbook` record exists.
 
-Idempotency receipts preserve principal, command kind, target, key, canonical request hash, expected revision or control version, resulting status, and frozen response reference. They are committed atomically with the bounded mutation or accepted Run. Exact reuse replays the result; another payload conflicts.
+Existing superseded Handbook Snapshot bytes remain eligible for explicit historical delivery with a prominent warning. Safety, privacy, ownership, or access revalidation blocks historical byte delivery. Evidence, provider, link, or policy invalidation blocks current delivery and regeneration but does not by itself block otherwise lawful explicit historical delivery.
+
+Idempotency receipts preserve principal, command kind, target, key, canonical request hash, expected revision or control version, resulting status, and frozen response reference for 30 days. They are committed atomically with the bounded mutation or accepted Run. During that period, exact reuse replays the original status and response; another payload conflicts. After 30 days, the response is removed and a minimal non-sensitive tombstone remains for the affected durable record's lifetime. Later reuse returns a typed expired-key conflict and never executes again.
 
 Inspection Records and segment manifests remain append-only. Replay Bundles contain immutable manifests and only allowlisted, lawfully retained, versioned, and hashed fixture artefacts. Verification Replays are separate non-canonical executions linked to the source Run and bundle; they cannot use canonical commit paths, create Approvals, or call live dependencies. Missing lawful material yields `unavailable`.
 
@@ -46,19 +50,21 @@ Indexes cover every foreign-key access path and accepted ownership, revision, ac
 
 ## Retention, deletion, and restoration
 
-Trips remain until explicit deletion or 24 months after the later of travel completion and meaningful Planner activity, with warning before automatic deletion. Closing Planner access begins a 30-day deletion grace period; explicit privacy deletion bypasses it.
+Trips are automatically deleted 24 months after the later of travel completion and meaningful Planner activity, with advance warning, unless the Planner explicitly deletes the Trip sooner. Closing Planner access begins a 30-day deletion grace period; explicit privacy deletion bypasses it.
 
 Initial retention limits are:
 
 - If the deferred Guest surface is introduced, Guest content follows the accepted 24-hour inactivity and seven-day absolute limits; transferred content is purged within 24 hours.
 - Checkpoints remain while resumable and for seven days after a terminal Run.
 - Unaccepted observations and transient Run artefacts remain for 30 days.
-- Idempotency receipts remain for 30 days after completion; delivered outbox rows remain for seven days.
+- Exact idempotency status and response receipts remain for 30 days after completion; minimal non-sensitive key tombstones remain for the affected durable record's lifetime. Delivered outbox rows remain for seven days.
 - Expired sessions and Invitation contact data remain for 30 days.
 - Runs, public events, Inspection Records, accepted Evidence, Approvals, revisions, Replay material, and handbooks follow their owning Trip, subject to lawful fixture-retention limits.
-- Security Audit Records remain for 24 months unless valid privacy deletion requires earlier removal.
+- Minimized Security Audit Records remain for one year, subject to earlier removal of identifiable links when privacy deletion requires it.
 
 Deletion immediately denies access and marks the ownership root `deletion_pending`, then an idempotent job hard-deletes the sensitive graph. Cascades apply only within clearly owned aggregates and `RESTRICT` applies across ownership roots. Completion requires orphan verification and creates only a non-identifying Deletion Receipt. Ordinary soft deletion is not privacy deletion.
+
+There is no informal Operator legal-hold feature. Any future preservation duty requires a separately reviewed decision and cannot be inferred from Operator authority.
 
 Production keeps 35 days of point-in-time recovery; non-production keeps seven days and never receives production data. Deletion commands also enter a restricted append-only Azure Blob ledger outside the database restore boundary. It contains only HMAC-derived Planner or Trip identifiers, deletion scope, timestamp, and Key Vault key version—never email or external identity subjects—and remains for 42 days. A restored database is scrubbed against this ledger and verified before serving traffic.
 

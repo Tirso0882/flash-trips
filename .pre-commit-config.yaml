@@ -1,0 +1,20 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: Ruff format
+        entry: uv run ruff format
+        language: system
+        types: [python]
+      - id: ruff-check
+        name: Ruff lint fixes
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+      - id: prettier-web
+        name: Prettier web
+        entry: pnpm --dir apps/web exec prettier --write .
+        language: system
+        files: ^apps/web/
+        pass_filenames: false
+        types_or: [css, javascript, json, ts, tsx]
