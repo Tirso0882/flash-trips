@@ -35,6 +35,7 @@ Run FastAPI and Next.js together with `just dev`. The Planner shell is at
 - `just contracts-check`: fail when committed generated contracts drift
 - `just test`: contract, persistence, and traceability tests
 - `just containers`: build both non-root OCI images
+- `just verify`: run lint, type checks, and tests during development
 - `just check`: run the complete non-container quality suite
 
 Persistence tests use real PostgreSQL. They skip only when `DATABASE_URL` and

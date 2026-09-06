@@ -57,4 +57,6 @@ dev:
     docker compose up -d postgres azurite
     trap 'kill 0' EXIT; uv run python -m flash_trips.composition & pnpm --dir apps/web dev & wait
 
+verify: lint typecheck test
+
 check: lint typecheck security contracts-check test
