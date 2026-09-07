@@ -70,6 +70,13 @@ if [[ "$1" == "pr" && "$2" == "ready" ]]; then
   exit 0
 fi
 
+if [[ "$1" == "pr" && "$2" == "merge" ]]; then
+  [[ " $* " == *" --auto "* ]] || exit 2
+  [[ " $* " == *" --squash "* ]] || exit 2
+  touch "$FAKE_GH_STATE_DIR/pr-auto-merge"
+  exit 0
+fi
+
 [[ "$1" == "api" ]] || exit 2
 shift
 
@@ -209,24 +216,26 @@ assert_contains "$test_root/second.out" "Reusing existing PR #99"
 
 (cd "$publish_repo" && PUBLISH_GH_BIN="$fake_gh" "$publisher" --pr --allow-dirty >"$test_root/ready.out" 2>&1)
 [[ -f "$FAKE_GH_STATE_DIR/pr-ready" ]] || fail "--pr did not mark the draft ready"
+[[ -f "$FAKE_GH_STATE_DIR/pr-auto-merge" ]] || fail "--pr did not enable squash auto-merge"
 assert_contains "$test_root/ready.out" "Marked existing PR #99 ready"
+assert_contains "$test_root/ready.out" "Enabled squash auto-merge for PR #99"
 
 rm -rf "$FAKE_GH_STATE_DIR"
 mkdir -p "$FAKE_GH_STATE_DIR"
 export FAKE_REMOTE_BRANCH="sandcastle/feature-117"
-export FAKE_PR_BASE="dev"
+export FAKE_PR_BASE="main"
 source_sha="$(git -C "$publish_repo" rev-parse HEAD)"
 (cd "$publish_repo" && PUBLISH_GH_BIN="$fake_gh" "$publisher" \
   --draft-pr \
   --source "$source_sha" \
   --branch "$FAKE_REMOTE_BRANCH" \
-  --base dev \
+  --base main \
   --title "Feature 117" \
   --body "Closes #117" \
   --json >"$test_root/json.out")
 jq -e \
   '.branch == "sandcastle/feature-117"
-   and .base == "dev"
+   and .base == "main"
    and .localCommit == $source
    and .tree == $tree
    and .prNumber == 99

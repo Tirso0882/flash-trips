@@ -249,6 +249,17 @@ describe("Sandcastle AFK environment", () => {
 });
 
 describe("Sandcastle prompt wiring", () => {
+  it("requires the repository default branch as the PR base", () => {
+    const source = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
+
+    assert.match(source, /function repositoryDefaultBranch\(\)/);
+    assert.match(source, /branch !== defaultBranch/);
+    assert.match(
+      source,
+      /Sandcastle must run from the default branch \$\{defaultBranch\}/,
+    );
+  });
+
   it("lets Sandcastle supply its reserved target branch argument", () => {
     const source = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
     const prompt = readFileSync(

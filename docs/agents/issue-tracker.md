@@ -88,9 +88,12 @@ authorization for one Feature. Sandcastle authorizes its dependency-ready
 frontier and may run independent Tasks concurrently within the global
 three-Task cap. Each Task has `sandcastle/task-{Task}`. Reviewed Tasks integrate
 into `sandcastle/feature-{Feature}`, which owns one draft pull request into the
-checked-out base branch. A Task closes only after the remote Feature tree and
-pull request are verified. The pull request becomes ready when no agent Task
-remains. Remove `agent:autopilot` to stop new claims; a claimed Task finishes.
+repository default branch, `main`. Sandcastle runs only from a clean,
+remote-matched `main` checkout. A Task closes only after the remote Feature tree
+and pull request are verified. The pull request becomes ready and enables
+squash auto-merge when no agent Task remains. GitHub's required checks remain
+the merge authority. Remove `agent:autopilot` to stop new claims; a claimed
+Task finishes.
 
 ## External gates and Task credentials
 

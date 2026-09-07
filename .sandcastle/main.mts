@@ -349,6 +349,17 @@ function capture(command: string, args: string[]): string {
   }).trim();
 }
 
+function repositoryDefaultBranch(): string {
+  return capture("gh", [
+    "repo",
+    "view",
+    "--json",
+    "defaultBranchRef",
+    "--jq",
+    ".defaultBranchRef.name",
+  ]);
+}
+
 function captureWithTimeout(
   command: string,
   args: string[],
@@ -477,6 +488,12 @@ function runPreflight(): void {
     );
   }
   capture("git", ["check-ref-format", "--branch", branch]);
+  const defaultBranch = repositoryDefaultBranch();
+  if (branch !== defaultBranch) {
+    throw new Error(
+      `Sandcastle must run from the default branch ${defaultBranch}, not ${branch}.`,
+    );
+  }
 
   const dirty = capture("git", ["status", "--porcelain"]);
   if (dirty) {
@@ -1738,8 +1755,8 @@ async function main(): Promise<void> {
   recoverInterruptedRun();
   shutdownController.signal.throwIfAborted();
 
-  // The checked-out branch is the immutable PR base for this run. Feature
-  // branches are published to it, but the local base itself never moves.
+  // Preflight proves that the checked-out branch is the repository default.
+  // It remains the immutable PR base, and the local checkout never moves.
   const targetBranch = capture("git", ["branch", "--show-current"]);
   const expectedTargetHead = capture("git", ["rev-parse", "HEAD"]);
   assertRemoteBaseMatches(targetBranch, expectedTargetHead);

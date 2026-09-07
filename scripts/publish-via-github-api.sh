@@ -16,7 +16,7 @@ reuse its pull request.
   --draft-pr    Create a draft PR when none exists. Reuse an existing PR
                 without changing a ready PR back to draft.
   --pr          Create a ready PR when none exists, or mark an existing draft
-                PR ready for review.
+                PR ready for review. Enable squash auto-merge after checks.
   --source REF  Publish this local commit or branch instead of HEAD.
   --branch NAME Publish to this remote branch instead of the current branch.
   --base NAME   Target this PR base instead of the default branch.
@@ -333,6 +333,8 @@ verified_pr_draft="$(printf '%s' "$verified_pr_json" | jq -r '.draft')"
 [[ "$verified_pr_url" == "$pr_url" ]] || fail "PR #$pr_number URL changed during publication"
 if [[ "$pr_mode" == "ready" ]]; then
   [[ "$verified_pr_draft" == "false" ]] || fail "PR #$pr_number is still draft"
+  "$GH_BIN" pr merge "$pr_number" --repo "$repo" --auto --squash >/dev/null
+  [[ "$json_output" == true ]] || printf 'Enabled squash auto-merge for PR #%s.\n' "$pr_number"
 fi
 pr_is_draft="$verified_pr_draft"
 
