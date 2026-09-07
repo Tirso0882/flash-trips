@@ -6,10 +6,10 @@
 .env
 .env.*
 !.env.example
+.secrets/
 *.log
 
 # Python environments and caches
-.trips/
 .venv/
 venv/
 __pycache__/
@@ -20,8 +20,10 @@ __pycache__/
 
 # Node.js and frontend build outputs
 node_modules/
+.pnpm-store/
 .next/
 .turbo/
+*.tsbuildinfo
 coverage/
 dist/
 
@@ -34,3 +36,7 @@ docs/personal-docs/
 
 # Lock files
 skills-lock.json
+
+# Local files
+scripts/publish-via-github-api.sh
+scripts/wizard-entra-external-id.sh

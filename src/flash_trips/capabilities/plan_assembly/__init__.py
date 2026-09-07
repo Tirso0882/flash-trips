@@ -1,0 +1,1 @@
+"""Plan Assembly capability boundary."""

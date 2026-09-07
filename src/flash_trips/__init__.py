@@ -1,0 +1,1 @@
+"""Flash Trips modular monolith."""

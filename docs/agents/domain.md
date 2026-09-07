@@ -5,9 +5,11 @@ This repository uses a single-context domain-documentation layout.
 ## Before exploring, read these
 
 - `CONTEXT.md` at the repository root.
-- Relevant decisions under `docs/adr/`.
+- `docs/adr/README.md`, then only the ADRs it identifies as relevant.
 
-If either is absent, proceed silently. Domain-modelling skills create documentation lazily when decisions or terminology are resolved.
+Do not scan every ADR by default. Read the whole directory only when the task explicitly requires a review across all architecture decisions.
+
+If any document is absent, proceed silently. Domain-modelling skills create documentation lazily when decisions or terminology are resolved.
 
 ## File structure
 
@@ -15,6 +17,7 @@ If either is absent, proceed silently. Domain-modelling skills create documentat
 /
 ├── CONTEXT.md
 ├── docs/adr/
+│   ├── README.md
 │   ├── 0001-build-flash-trips-as-a-greenfield-product.md
 │   └── 0002-separate-model-proposals-from-deterministic-authority.md
 └── src/

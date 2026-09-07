@@ -1,0 +1,13 @@
+# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+.env
+.secrets/
+docs/personal-docs/
+
+# Exclude generated content
+node_modules/
+.next/
+dist/
+coverage/
+*.log
+*.min.js
+drizzle/meta/

@@ -1,0 +1,142 @@
+[importlinter]
+root_package = flash_trips
+include_external_packages = True
+
+[importlinter:contract:kernel]
+name = Kernel is independent
+type = forbidden
+source_modules =
+    flash_trips.kernel
+forbidden_modules =
+    flash_trips.application
+    flash_trips.capabilities
+    flash_trips.platform
+    flash_trips.adapters
+    flash_trips.composition
+    alembic
+    asyncpg
+    fastapi
+    httpx
+    psycopg
+    sqlalchemy
+
+[importlinter:contract:application]
+name = Application does not depend on adapters or composition
+type = forbidden
+source_modules =
+    flash_trips.application
+forbidden_modules =
+    flash_trips.adapters
+    flash_trips.composition
+    alembic
+    asyncpg
+    fastapi
+    httpx
+    psycopg
+    sqlalchemy
+
+[importlinter:contract:capabilities]
+name = Capabilities do not depend on application adapters or composition
+type = forbidden
+source_modules =
+    flash_trips.capabilities
+forbidden_modules =
+    flash_trips.application
+    flash_trips.adapters
+    flash_trips.composition
+    alembic
+    asyncpg
+    fastapi
+    httpx
+    psycopg
+    sqlalchemy
+    flash_trips.platform.handbook
+    flash_trips.platform.reasoning
+    flash_trips.platform.run_inspector
+    flash_trips.platform.workflow
+
+[importlinter:contract:capability-independence]
+name = Capabilities do not import sibling capabilities
+type = independence
+modules =
+    flash_trips.capabilities.accommodation
+    flash_trips.capabilities.activities
+    flash_trips.capabilities.air_travel
+    flash_trips.capabilities.budget
+    flash_trips.capabilities.dining
+    flash_trips.capabilities.ground_transport
+    flash_trips.capabilities.itinerary
+    flash_trips.capabilities.plan_assembly
+    flash_trips.capabilities.travel_readiness
+    flash_trips.capabilities.trip_request
+    flash_trips.capabilities.trip_structure
+
+[importlinter:contract:capability-internals]
+name = Capability internals are protected
+type = protected
+protected_modules =
+    flash_trips.capabilities.*._implementation
+allowed_importers =
+    flash_trips.capabilities.*
+as_packages = False
+
+[importlinter:contract:platform]
+name = Platform does not depend on application adapters or composition
+type = forbidden
+source_modules =
+    flash_trips.platform
+forbidden_modules =
+    flash_trips.application
+    flash_trips.adapters
+    flash_trips.composition
+    alembic
+    asyncpg
+    fastapi
+    httpx
+    psycopg
+    sqlalchemy
+
+[importlinter:contract:platform-independence]
+name = Platform modules do not import sibling implementations
+type = independence
+modules =
+    flash_trips.platform.approval
+    flash_trips.platform.evidence_ledger
+    flash_trips.platform.handbook
+    flash_trips.platform.reasoning
+    flash_trips.platform.route_measurement
+    flash_trips.platform.run_inspector
+    flash_trips.platform.workflow
+
+[importlinter:contract:platform-internals]
+name = Platform implementations are protected
+type = protected
+protected_modules =
+    flash_trips.platform.*._implementation
+allowed_importers =
+    flash_trips.platform.*
+as_packages = False
+
+[importlinter:contract:adapters]
+name = Adapters do not depend on composition
+type = forbidden
+source_modules =
+    flash_trips.adapters
+forbidden_modules =
+    flash_trips.composition
+
+[importlinter:contract:http-adapter]
+name = HTTP adapter does not depend on PostgreSQL
+type = forbidden
+source_modules =
+    flash_trips.adapters.http
+forbidden_modules =
+    flash_trips.adapters.postgres
+
+[importlinter:contract:postgres-adapter]
+name = PostgreSQL adapter does not depend on HTTP
+type = forbidden
+source_modules =
+    flash_trips.adapters.postgres
+forbidden_modules =
+    flash_trips.adapters.http

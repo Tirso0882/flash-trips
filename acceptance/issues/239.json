@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "issue": 239,
+  "title": "Establish the authenticated principal contract and protected route seam",
+  "outcome": "Added a provider-neutral principal and protected API endpoint with redacted identity data and safe 401/403 problems.",
+  "checks": [
+    {
+      "name": "authenticated principal HTTP contract",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/contract/test_http_principal.py",
+        "tests/contract/test_generated_openapi.py",
+        "tests/contract/test_import_boundaries.py"
+      ]
+    }
+  ]
+}
