@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
+  AUTOPILOT_FEATURE_QUERY,
   hasExternalPreRunGates,
   parseAfkEnvironment,
   parseReview,
@@ -110,6 +111,10 @@ describe("Sandcastle review parsing", () => {
 });
 
 describe("Sandcastle Feature autopilot", () => {
+  it("discovers Features without nesting their Task graph", () => {
+    assert.doesNotMatch(AUTOPILOT_FEATURE_QUERY, /\bsubIssues\s*\(/);
+  });
+
   it("authorizes the ready frontier under each opted-in Feature", () => {
     assert.deepEqual(
       selectAutopilotAuthorizations([
