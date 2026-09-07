@@ -1270,9 +1270,10 @@
         <section id="delivery">
           <h2>CI and Azure production</h2>
           <p class="section-intro">
-            Pull requests and main run three CI jobs. A successful main CI run
-            starts production. Release and deployment use separate secretless
-            GitHub OIDC identities with narrow Azure roles.
+            Pull requests and main run three CI jobs. After successful main CI,
+            a release plan continues only when production image inputs changed.
+            Release and deployment use separate secretless GitHub OIDC
+            identities with narrow Azure roles.
           </p>
           <div class="diagram">
             <svg
@@ -1373,13 +1374,13 @@
                 rx="8"
               />
               <text class="svg-title" x="575" y="146" text-anchor="middle">
-                Release identity
+                Release plan + identity
               </text>
               <text class="svg-copy" x="575" y="170" text-anchor="middle">
-                GitHub OIDC from main
+                deployable inputs only
               </text>
               <text class="svg-label" x="575" y="193" text-anchor="middle">
-                ACR Reader + AcrPush
+                main OIDC · ACR push
               </text>
               <text class="svg-label" x="575" y="212" text-anchor="middle">
                 build immutable digests
@@ -1541,7 +1542,9 @@
           </div>
           <div class="callout">
             <strong>Current artifact flow:</strong> CI builds and smoke-tests
-            local images, then the production workflow rebuilds both images from
+            local images. After main CI, the production workflow skips
+            documentation, test, infrastructure, CI, and agent-only commits.
+            Qualifying or manually requested releases rebuild both images from
             the selected main commit before publishing digests. The CI-built
             image objects themselves are not promoted.
           </div>

@@ -130,9 +130,16 @@ ready and enables squash auto-merge. GitHub merges only after the required
 ## Production deployment
 
 Production runs on Azure Container Apps in West Europe. GitHub Actions builds
-the API and web images once after `main` CI succeeds, publishes immutable image
-digests to Azure Container Registry, and pauses at the protected `production`
-environment before deploying those exact digests.
+the API and web images after `main` CI succeeds only when the merged commit
+changes a production image input. Changes under `src/`, `apps/api/`,
+`apps/web/`, or `contracts/ts/`, plus production manifests, lockfiles, and
+`.dockerignore`, qualify. Documentation, tests, infrastructure definitions, CI,
+and agent configuration alone do not.
+
+Qualifying runs publish immutable image digests to Azure Container Registry and
+pause at the protected `production` environment before deploying those exact
+digests. A manually dispatched Production workflow always releases its selected
+commit from `main`, including intentional redeployments.
 
 After the deployment files have reached `main`, run the repeatable setup wizard:
 
