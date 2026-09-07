@@ -1,0 +1,1785 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flash Trips architecture map</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f6f7f9;
+        --surface: #ffffff;
+        --surface-2: #eef1f5;
+        --text: #18202a;
+        --muted: #5c6876;
+        --line: #c8d0da;
+        --accent: #1769aa;
+        --accent-soft: #dcecf8;
+        --good: #26734d;
+        --warning: #8a5a00;
+        --code: #edf0f4;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #11151a;
+          --surface: #191f26;
+          --surface-2: #222a33;
+          --text: #e8edf2;
+          --muted: #aab4c0;
+          --line: #3a4653;
+          --accent: #65b7f3;
+          --accent-soft: #163650;
+          --good: #79c99e;
+          --warning: #e4b85f;
+          --code: #232b34;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          15px/1.55 system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      code {
+        padding: 0.12rem 0.3rem;
+        border-radius: 4px;
+        background: var(--code);
+        font:
+          0.9em ui-monospace,
+          SFMono-Regular,
+          Consolas,
+          monospace;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 250px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      aside {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow: auto;
+        padding: 24px 18px;
+        border-right: 1px solid var(--line);
+        background: var(--surface);
+      }
+
+      .brand {
+        margin: 0 0 6px;
+        font-size: 1.05rem;
+      }
+
+      .aside-note {
+        margin: 0 0 22px;
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      nav a {
+        display: block;
+        margin: 3px 0;
+        padding: 7px 9px;
+        border-left: 3px solid transparent;
+        color: var(--muted);
+        text-decoration: none;
+      }
+
+      nav a:hover,
+      nav a.active {
+        border-left-color: var(--accent);
+        background: var(--accent-soft);
+        color: var(--text);
+      }
+
+      main {
+        width: min(1180px, 100%);
+        padding: 48px clamp(22px, 5vw, 72px) 100px;
+      }
+
+      header {
+        margin-bottom: 48px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: clamp(1.9rem, 4vw, 3rem);
+        line-height: 1.1;
+      }
+
+      h2 {
+        margin: 0 0 10px;
+        font-size: 1.55rem;
+      }
+
+      h3 {
+        margin: 0 0 8px;
+        font-size: 1.02rem;
+      }
+
+      p {
+        margin: 0.4rem 0 1rem;
+      }
+
+      .lede {
+        max-width: 760px;
+        color: var(--muted);
+        font-size: 1.05rem;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 18px;
+      }
+
+      .chip {
+        padding: 4px 9px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      section {
+        scroll-margin-top: 24px;
+        margin: 0 0 56px;
+      }
+
+      .section-intro {
+        max-width: 830px;
+        color: var(--muted);
+      }
+
+      .diagram {
+        margin-top: 20px;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+      }
+
+      svg {
+        display: block;
+        width: 100%;
+        min-width: 760px;
+        height: auto;
+      }
+
+      .node {
+        fill: var(--surface-2);
+        stroke: var(--line);
+        stroke-width: 1.5;
+      }
+
+      .node-accent {
+        fill: var(--accent-soft);
+        stroke: var(--accent);
+        stroke-width: 1.5;
+      }
+
+      .node-external {
+        fill: var(--surface);
+        stroke: var(--muted);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 4;
+      }
+
+      .flow {
+        fill: none;
+        stroke: var(--muted);
+        stroke-width: 1.7;
+        marker-end: url(#arrow);
+      }
+
+      .flow-accent {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2;
+        marker-end: url(#arrow-accent);
+      }
+
+      .svg-title {
+        fill: var(--text);
+        font:
+          600 14px system-ui,
+          sans-serif;
+      }
+
+      .svg-copy {
+        fill: var(--muted);
+        font:
+          12px system-ui,
+          sans-serif;
+      }
+
+      .svg-label {
+        fill: var(--muted);
+        font:
+          11px system-ui,
+          sans-serif;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      .legend span::before {
+        display: inline-block;
+        width: 14px;
+        height: 9px;
+        margin-right: 6px;
+        border: 1px solid var(--line);
+        background: var(--surface-2);
+        content: "";
+      }
+
+      .legend .entry::before {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .legend .external::before {
+        border-style: dashed;
+        background: var(--surface);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 14px;
+        margin-top: 20px;
+      }
+
+      .panel {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+
+      .panel p,
+      .panel ul {
+        margin-bottom: 0;
+        color: var(--muted);
+      }
+
+      .steps {
+        counter-reset: step;
+        display: grid;
+        gap: 10px;
+        margin: 20px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .steps li {
+        position: relative;
+        min-height: 42px;
+        padding: 10px 12px 10px 48px;
+        border-left: 2px solid var(--line);
+        background: var(--surface);
+      }
+
+      .steps li::before {
+        counter-increment: step;
+        position: absolute;
+        top: 9px;
+        left: 12px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--accent-soft);
+        color: var(--accent);
+        text-align: center;
+        font-weight: 700;
+        line-height: 24px;
+        content: counter(step);
+      }
+
+      .search {
+        width: 100%;
+        margin: 12px 0 16px;
+        padding: 9px 11px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+        font: inherit;
+      }
+
+      .path-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+        gap: 10px;
+      }
+
+      .path-item {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: start;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--surface);
+      }
+
+      .path-item strong {
+        display: block;
+        margin-bottom: 3px;
+      }
+
+      .path-item small {
+        display: block;
+        color: var(--muted);
+      }
+
+      button {
+        padding: 5px 8px;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        background: var(--surface-2);
+        color: var(--text);
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      .callout {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-left: 4px solid var(--warning);
+        background: var(--surface);
+      }
+
+      .callout strong {
+        color: var(--warning);
+      }
+
+      footer {
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      @media (max-width: 820px) {
+        .layout {
+          display: block;
+        }
+
+        aside {
+          position: static;
+          width: 100%;
+          height: auto;
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        nav {
+          display: flex;
+          flex-wrap: wrap;
+        }
+
+        nav a {
+          border-left: 0;
+          border-bottom: 2px solid transparent;
+        }
+
+        nav a:hover,
+        nav a.active {
+          border-bottom-color: var(--accent);
+        }
+
+        main {
+          padding-top: 32px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside>
+        <h2 class="brand">Flash Trips</h2>
+        <p class="aside-note">Architecture and repository wayfinding</p>
+        <nav aria-label="Architecture sections">
+          <a href="#system">System map</a>
+          <a href="#scope">Current scope</a>
+          <a href="#request">Status request</a>
+          <a href="#modules">Python modules</a>
+          <a href="#sandcastle">Sandcastle</a>
+          <a href="#delivery">Delivery</a>
+          <a href="#paths">Repository paths</a>
+        </nav>
+      </aside>
+
+      <main>
+        <header>
+          <h1>Architecture map</h1>
+          <p class="lede">
+            A navigable view of the current Flash Trips scaffold. Follow the
+            highlighted entry path from the browser, use the module map when
+            placing Python code, and use the Sandcastle and delivery maps when
+            changing automation.
+          </p>
+          <div class="chips" aria-label="Architecture summary">
+            <span class="chip">Next.js BFF and UI</span>
+            <span class="chip">FastAPI modular monolith</span>
+            <span class="chip">Generated OpenAPI client</span>
+            <span class="chip">PostgreSQL adapters</span>
+            <span class="chip">Azure Container Apps</span>
+          </div>
+        </header>
+
+        <section id="system">
+          <h2>System map</h2>
+          <p class="section-intro">
+            The browser enters through Next.js. Server-side BFF routes call the
+            FastAPI application through the generated TypeScript client.
+            Composition wires application interfaces to adapters. Most product
+            capability and platform modules are defined as architecture slots
+            and are not yet part of a complete planning request flow.
+          </p>
+          <div class="diagram">
+            <svg
+              viewBox="0 0 1040 430"
+              role="img"
+              aria-labelledby="system-title"
+            >
+              <title id="system-title">Flash Trips runtime system map</title>
+              <defs>
+                <marker
+                  id="arrow"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="4"
+                  orient="auto"
+                >
+                  <path d="M0,0 L8,4 L0,8 Z" fill="var(--muted)" />
+                </marker>
+                <marker
+                  id="arrow-accent"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="4"
+                  orient="auto"
+                >
+                  <path d="M0,0 L8,4 L0,8 Z" fill="var(--accent)" />
+                </marker>
+              </defs>
+
+              <rect
+                class="node-accent"
+                x="30"
+                y="165"
+                width="150"
+                height="76"
+                rx="8"
+              />
+              <text class="svg-title" x="105" y="194" text-anchor="middle">
+                Browser
+              </text>
+              <text class="svg-copy" x="105" y="216" text-anchor="middle">
+                Planner or Operator
+              </text>
+
+              <rect
+                class="node-accent"
+                x="240"
+                y="95"
+                width="190"
+                height="216"
+                rx="8"
+              />
+              <text class="svg-title" x="335" y="126" text-anchor="middle">
+                Next.js
+              </text>
+              <text class="svg-copy" x="335" y="150" text-anchor="middle">
+                App Router UI
+              </text>
+              <line x1="265" y1="169" x2="405" y2="169" stroke="var(--line)" />
+              <text class="svg-copy" x="335" y="198" text-anchor="middle">
+                BFF routes
+              </text>
+              <text class="svg-label" x="335" y="220" text-anchor="middle">
+                server-only config
+              </text>
+              <line x1="265" y1="239" x2="405" y2="239" stroke="var(--line)" />
+              <text class="svg-copy" x="335" y="268" text-anchor="middle">
+                Generated API client
+              </text>
+              <text class="svg-label" x="335" y="290" text-anchor="middle">
+                from OpenAPI
+              </text>
+
+              <rect
+                class="node"
+                x="490"
+                y="65"
+                width="220"
+                height="276"
+                rx="8"
+              />
+              <text class="svg-title" x="600" y="98" text-anchor="middle">
+                Python modular monolith
+              </text>
+              <rect
+                class="node-accent"
+                x="515"
+                y="121"
+                width="170"
+                height="48"
+                rx="6"
+              />
+              <text class="svg-copy" x="600" y="150" text-anchor="middle">
+                FastAPI HTTP adapters
+              </text>
+              <rect
+                class="node"
+                x="515"
+                y="187"
+                width="170"
+                height="48"
+                rx="6"
+              />
+              <text class="svg-copy" x="600" y="216" text-anchor="middle">
+                Application interfaces
+              </text>
+              <rect
+                class="node"
+                x="515"
+                y="253"
+                width="170"
+                height="62"
+                rx="6"
+              />
+              <text class="svg-copy" x="600" y="279" text-anchor="middle">
+                Capabilities + platform
+              </text>
+              <text class="svg-label" x="600" y="299" text-anchor="middle">
+                domain modules
+              </text>
+
+              <rect
+                class="node-external"
+                x="770"
+                y="55"
+                width="220"
+                height="70"
+                rx="8"
+              />
+              <text class="svg-title" x="880" y="84" text-anchor="middle">
+                PostgreSQL
+              </text>
+              <text class="svg-copy" x="880" y="106" text-anchor="middle">
+                runtime and migration roles
+              </text>
+
+              <rect
+                class="node-external"
+                x="770"
+                y="150"
+                width="220"
+                height="70"
+                rx="8"
+              />
+              <text class="svg-title" x="880" y="179" text-anchor="middle">
+                Identity provider
+              </text>
+              <text class="svg-copy" x="880" y="201" text-anchor="middle">
+                access-token seam
+              </text>
+
+              <rect
+                class="node-external"
+                x="770"
+                y="245"
+                width="220"
+                height="86"
+                rx="8"
+              />
+              <text class="svg-title" x="880" y="275" text-anchor="middle">
+                Travel and model providers
+              </text>
+              <text class="svg-copy" x="880" y="297" text-anchor="middle">
+                future adapters behind ports
+              </text>
+              <text class="svg-label" x="880" y="316" text-anchor="middle">
+                live calls disabled by default
+              </text>
+
+              <path class="flow-accent" d="M180 203 H240" />
+              <path class="flow-accent" d="M430 203 H490" />
+              <path class="flow" d="M710 105 H770" />
+              <path class="flow" d="M710 185 H770" />
+              <path class="flow" d="M710 285 H770" />
+              <text class="svg-label" x="210" y="191" text-anchor="middle">
+                HTTPS
+              </text>
+              <text class="svg-label" x="460" y="191" text-anchor="middle">
+                typed HTTP
+              </text>
+            </svg>
+          </div>
+          <div class="legend">
+            <span class="entry">Current request entry path</span>
+            <span>Internal module</span>
+            <span class="external">External dependency or seam</span>
+          </div>
+        </section>
+
+        <section id="scope">
+          <h2>Implemented versus planned</h2>
+          <p class="section-intro">
+            The repository establishes strict seams ahead of the product
+            implementation. Treat an existing directory as an allowed module
+            location, not proof that its runtime behavior exists.
+          </p>
+          <div class="grid">
+            <article class="panel">
+              <h3>Implemented end to end</h3>
+              <p>
+                Web-to-API service status, FastAPI request IDs and typed
+                problems, provider-neutral authenticated-principal handling,
+                generated contracts, container smoke tests, CI, and Azure
+                delivery.
+              </p>
+            </article>
+            <article class="panel">
+              <h3>Defined but not connected</h3>
+              <p>
+                The PostgreSQL transaction adapter and migration foundation,
+                secure session policy constants, JSON logger, Key Vault access,
+                and Application Insights resources exist but do not participate
+                in a current request flow.
+              </p>
+            </article>
+            <article class="panel">
+              <h3>Architecture slots</h3>
+              <p>
+                Capability and platform packages are currently empty package
+                markers. Planner and Operator pages are shells. The ADRs define
+                the intended planning workflow, persistence, evidence, approval,
+                reasoning, and handbook behavior.
+              </p>
+            </article>
+            <article class="panel">
+              <h3>Fail-closed defaults</h3>
+              <p>
+                The default access-token verifier rejects all tokens. Live
+                provider and model calls have zero authority. Production does
+                not currently provision PostgreSQL or inject application
+                secrets.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section id="request">
+          <h2>Current status request</h2>
+          <p class="section-intro">
+            This is the fully implemented end-to-end path and the best starting
+            point for learning how contracts, the BFF, HTTP adapters, and
+            application interfaces fit together.
+          </p>
+          <ol class="steps">
+            <li>
+              The browser requests <code>GET /api/status</code> from the Next.js
+              application.
+            </li>
+            <li>
+              The BFF resolves <code>FLASH_TRIPS_API_BASE_URL</code> and creates
+              the generated <code>@flash-trips/api-client</code>.
+            </li>
+            <li>
+              The client calls FastAPI at <code>GET /api/v1/status</code>.
+            </li>
+            <li>
+              The HTTP adapter calls <code>TripPlanning.service_status()</code>
+              through the application interface.
+            </li>
+            <li>
+              <code>StaticServiceStatus</code> returns the kernel model. FastAPI
+              serializes it using the canonical Pydantic contract.
+            </li>
+            <li>
+              The BFF returns the same JSON. Backend failures become a stable
+              <code>application/problem+json</code> response with a request ID.
+            </li>
+          </ol>
+        </section>
+
+        <section id="modules">
+          <h2>Python module direction</h2>
+          <p class="section-intro">
+            Dependencies point inward toward stable domain types and ports.
+            Composition is the only place that knows concrete adapters.
+            Import-linter enforces these directions and protects private
+            <code>_implementation</code> modules.
+          </p>
+          <div class="diagram">
+            <svg
+              viewBox="0 0 1040 500"
+              role="img"
+              aria-labelledby="module-title"
+            >
+              <title id="module-title">
+                Python modular monolith dependency map
+              </title>
+              <defs>
+                <marker
+                  id="module-arrow"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="4"
+                  orient="auto"
+                >
+                  <path d="M0,0 L8,4 L0,8 Z" fill="var(--muted)" />
+                </marker>
+              </defs>
+
+              <rect
+                class="node-accent"
+                x="390"
+                y="28"
+                width="260"
+                height="66"
+                rx="8"
+              />
+              <text class="svg-title" x="520" y="56" text-anchor="middle">
+                composition/
+              </text>
+              <text class="svg-copy" x="520" y="78" text-anchor="middle">
+                wires interfaces to adapters
+              </text>
+
+              <rect
+                class="node"
+                x="95"
+                y="155"
+                width="220"
+                height="92"
+                rx="8"
+              />
+              <text class="svg-title" x="205" y="187" text-anchor="middle">
+                adapters/
+              </text>
+              <text class="svg-copy" x="205" y="210" text-anchor="middle">
+                HTTP, identity, PostgreSQL
+              </text>
+              <text class="svg-label" x="205" y="229" text-anchor="middle">
+                concrete edge implementations
+              </text>
+
+              <rect
+                class="node"
+                x="410"
+                y="155"
+                width="220"
+                height="92"
+                rx="8"
+              />
+              <text class="svg-title" x="520" y="187" text-anchor="middle">
+                application/
+              </text>
+              <text class="svg-copy" x="520" y="210" text-anchor="middle">
+                use-case interfaces and ports
+              </text>
+              <text class="svg-label" x="520" y="229" text-anchor="middle">
+                orchestration seam
+              </text>
+
+              <rect
+                class="node"
+                x="725"
+                y="155"
+                width="220"
+                height="92"
+                rx="8"
+              />
+              <text class="svg-title" x="835" y="187" text-anchor="middle">
+                contracts/
+              </text>
+              <text class="svg-copy" x="835" y="210" text-anchor="middle">
+                OpenAPI + TypeScript client
+              </text>
+              <text class="svg-label" x="835" y="229" text-anchor="middle">
+                generated, never hand-edited
+              </text>
+
+              <rect
+                class="node"
+                x="205"
+                y="318"
+                width="250"
+                height="110"
+                rx="8"
+              />
+              <text class="svg-title" x="330" y="350" text-anchor="middle">
+                capabilities/
+              </text>
+              <text class="svg-copy" x="330" y="374" text-anchor="middle">
+                trip-specific domain modules
+              </text>
+              <text class="svg-label" x="330" y="397" text-anchor="middle">
+                no sibling capability imports
+              </text>
+
+              <rect
+                class="node"
+                x="585"
+                y="318"
+                width="250"
+                height="110"
+                rx="8"
+              />
+              <text class="svg-title" x="710" y="350" text-anchor="middle">
+                platform/
+              </text>
+              <text class="svg-copy" x="710" y="374" text-anchor="middle">
+                shared planning mechanisms
+              </text>
+              <text class="svg-label" x="710" y="397" text-anchor="middle">
+                approval, evidence, workflow
+              </text>
+
+              <rect
+                class="node-accent"
+                x="390"
+                y="456"
+                width="260"
+                height="58"
+                rx="8"
+              />
+              <text class="svg-title" x="520" y="481" text-anchor="middle">
+                kernel/
+              </text>
+              <text class="svg-copy" x="520" y="501" text-anchor="middle">
+                framework-free domain primitives
+              </text>
+
+              <path
+                d="M455 94 L270 155"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#module-arrow)"
+              />
+              <path
+                d="M520 94 V155"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#module-arrow)"
+              />
+              <path
+                d="M585 94 L770 155"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#module-arrow)"
+              />
+              <path
+                d="M315 201 H410"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#module-arrow)"
+              />
+              <path
+                d="M485 247 L385 318"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#module-arrow)"
+              />
+              <path
+                d="M555 247 L655 318"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#module-arrow)"
+              />
+              <path
+                d="M330 428 L450 456"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#module-arrow)"
+              />
+              <path
+                d="M710 428 L590 456"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#module-arrow)"
+              />
+            </svg>
+          </div>
+          <div class="grid">
+            <article class="panel">
+              <h3>Capability modules</h3>
+              <p>
+                Accommodation, activities, air travel, budget, dining, ground
+                transport, itinerary, plan assembly, travel readiness, trip
+                request, and trip structure.
+              </p>
+            </article>
+            <article class="panel">
+              <h3>Platform modules</h3>
+              <p>
+                Approval, evidence ledger, handbook, reasoning, route
+                measurement, run inspector, and workflow.
+              </p>
+            </article>
+            <article class="panel">
+              <h3>Canonical contract flow</h3>
+              <p>
+                Pydantic models feed FastAPI OpenAPI.
+                <code>just contracts</code>
+                regenerates the checked-in TypeScript client.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section id="sandcastle">
+          <h2>Sandcastle delivery loop</h2>
+          <p class="section-intro">
+            The host process owns tracker and publication writes. Agents work in
+            Docker sandboxes and only produce commits plus validated output.
+            Independent Tasks can run concurrently, up to three at a time.
+          </p>
+          <div class="diagram">
+            <svg
+              viewBox="0 0 1120 520"
+              role="img"
+              aria-labelledby="sandcastle-title"
+            >
+              <title id="sandcastle-title">
+                Sandcastle feature delivery lifecycle
+              </title>
+              <defs>
+                <marker
+                  id="sand-arrow"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="4"
+                  orient="auto"
+                >
+                  <path d="M0,0 L8,4 L0,8 Z" fill="var(--muted)" />
+                </marker>
+                <marker
+                  id="sand-arrow-accent"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="4"
+                  orient="auto"
+                >
+                  <path d="M0,0 L8,4 L0,8 Z" fill="var(--accent)" />
+                </marker>
+              </defs>
+
+              <rect
+                class="node-external"
+                x="30"
+                y="55"
+                width="190"
+                height="82"
+                rx="8"
+              />
+              <text class="svg-title" x="125" y="84" text-anchor="middle">
+                GitHub Issues
+              </text>
+              <text class="svg-copy" x="125" y="106" text-anchor="middle">
+                Feature + ready Tasks
+              </text>
+              <text class="svg-label" x="125" y="124" text-anchor="middle">
+                labels + dependencies
+              </text>
+
+              <rect
+                class="node-accent"
+                x="280"
+                y="42"
+                width="250"
+                height="108"
+                rx="8"
+              />
+              <text class="svg-title" x="405" y="72" text-anchor="middle">
+                Host orchestrator
+              </text>
+              <text class="svg-copy" x="405" y="96" text-anchor="middle">
+                preflight, claims, state, writes
+              </text>
+              <text class="svg-label" x="405" y="119" text-anchor="middle">
+                .sandcastle/main.mts
+              </text>
+              <text class="svg-label" x="405" y="137" text-anchor="middle">
+                clean remote-matched main
+              </text>
+
+              <rect
+                class="node"
+                x="590"
+                y="55"
+                width="190"
+                height="82"
+                rx="8"
+              />
+              <text class="svg-title" x="685" y="84" text-anchor="middle">
+                Planner sandbox
+              </text>
+              <text class="svg-copy" x="685" y="106" text-anchor="middle">
+                selects ready frontier
+              </text>
+              <text class="svg-label" x="685" y="124" text-anchor="middle">
+                validated plan JSON
+              </text>
+
+              <rect
+                class="node"
+                x="840"
+                y="55"
+                width="240"
+                height="82"
+                rx="8"
+              />
+              <text class="svg-title" x="960" y="84" text-anchor="middle">
+                Task pipelines, max 3
+              </text>
+              <text class="svg-copy" x="960" y="106" text-anchor="middle">
+                sandcastle/task-{number}
+              </text>
+              <text class="svg-label" x="960" y="124" text-anchor="middle">
+                independent Docker worktrees
+              </text>
+
+              <rect
+                class="node"
+                x="125"
+                y="245"
+                width="200"
+                height="86"
+                rx="8"
+              />
+              <text class="svg-title" x="225" y="275" text-anchor="middle">
+                Implementer
+              </text>
+              <text class="svg-copy" x="225" y="297" text-anchor="middle">
+                test, code, verify, commit
+              </text>
+              <text class="svg-label" x="225" y="316" text-anchor="middle">
+                no tracker writes
+              </text>
+
+              <rect
+                class="node"
+                x="400"
+                y="245"
+                width="200"
+                height="86"
+                rx="8"
+              />
+              <text class="svg-title" x="500" y="275" text-anchor="middle">
+                Reviewer
+              </text>
+              <text class="svg-copy" x="500" y="297" text-anchor="middle">
+                standards + spec gate
+              </text>
+              <text class="svg-label" x="500" y="316" text-anchor="middle">
+                fixes clear scoped issues
+              </text>
+
+              <rect
+                class="node"
+                x="675"
+                y="245"
+                width="200"
+                height="86"
+                rx="8"
+              />
+              <text class="svg-title" x="775" y="275" text-anchor="middle">
+                Integration sandbox
+              </text>
+              <text class="svg-copy" x="775" y="297" text-anchor="middle">
+                merge reviewed Tasks
+              </text>
+              <text class="svg-label" x="775" y="316" text-anchor="middle">
+                sandcastle/feature-{Feature}
+              </text>
+
+              <rect
+                class="node-external"
+                x="950"
+                y="245"
+                width="140"
+                height="86"
+                rx="8"
+              />
+              <text class="svg-title" x="1020" y="275" text-anchor="middle">
+                Feature PR
+              </text>
+              <text class="svg-copy" x="1020" y="297" text-anchor="middle">
+                draft, then ready
+              </text>
+              <text class="svg-label" x="1020" y="316" text-anchor="middle">
+                base: main
+              </text>
+
+              <rect
+                class="node-external"
+                x="675"
+                y="415"
+                width="200"
+                height="70"
+                rx="8"
+              />
+              <text class="svg-title" x="775" y="444" text-anchor="middle">
+                Required CI
+              </text>
+              <text class="svg-copy" x="775" y="466" text-anchor="middle">
+                quality, containers, traceability
+              </text>
+
+              <rect
+                class="node-accent"
+                x="950"
+                y="415"
+                width="140"
+                height="70"
+                rx="8"
+              />
+              <text class="svg-title" x="1020" y="444" text-anchor="middle">
+                Squash merge
+              </text>
+              <text class="svg-copy" x="1020" y="466" text-anchor="middle">
+                GitHub is authority
+              </text>
+
+              <path
+                d="M220 96 H280"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="2"
+                marker-end="url(#sand-arrow-accent)"
+              />
+              <path
+                d="M530 96 H590"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="2"
+                marker-end="url(#sand-arrow-accent)"
+              />
+              <path
+                d="M780 96 H840"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="2"
+                marker-end="url(#sand-arrow-accent)"
+              />
+              <path
+                d="M960 137 C960 190 225 185 225 245"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#sand-arrow)"
+              />
+              <path
+                d="M325 288 H400"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#sand-arrow)"
+              />
+              <path
+                d="M600 288 H675"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#sand-arrow)"
+              />
+              <path
+                d="M875 288 H950"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#sand-arrow)"
+              />
+              <path
+                d="M1020 331 V415"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#sand-arrow)"
+              />
+              <path
+                d="M875 450 H950"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="2"
+                marker-end="url(#sand-arrow-accent)"
+              />
+              <path d="M950 450 H875" fill="none" stroke="transparent" />
+            </svg>
+          </div>
+          <div class="callout">
+            <strong>Authority rule:</strong> applying
+            <code>agent:autopilot</code> to a Feature authorizes repeated Task
+            claims, spending, branch publication, and pull-request updates.
+            Remove it to stop new claims. An already claimed Task finishes.
+          </div>
+        </section>
+
+        <section id="delivery">
+          <h2>CI and Azure production</h2>
+          <p class="section-intro">
+            Pull requests and main run three CI jobs. A successful main CI run
+            starts production. Release and deployment use separate secretless
+            GitHub OIDC identities with narrow Azure roles.
+          </p>
+          <div class="diagram">
+            <svg
+              viewBox="0 0 1080 390"
+              role="img"
+              aria-labelledby="delivery-title"
+            >
+              <title id="delivery-title">
+                CI and Azure production delivery flow
+              </title>
+              <defs>
+                <marker
+                  id="delivery-arrow"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="4"
+                  orient="auto"
+                >
+                  <path d="M0,0 L8,4 L0,8 Z" fill="var(--muted)" />
+                </marker>
+                <marker
+                  id="delivery-arrow-accent"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="4"
+                  orient="auto"
+                >
+                  <path d="M0,0 L8,4 L0,8 Z" fill="var(--accent)" />
+                </marker>
+              </defs>
+
+              <rect
+                class="node-accent"
+                x="30"
+                y="138"
+                width="150"
+                height="70"
+                rx="8"
+              />
+              <text class="svg-title" x="105" y="167" text-anchor="middle">
+                main commit
+              </text>
+              <text class="svg-copy" x="105" y="189" text-anchor="middle">
+                or pull request
+              </text>
+
+              <rect
+                class="node"
+                x="235"
+                y="40"
+                width="190"
+                height="70"
+                rx="8"
+              />
+              <text class="svg-title" x="330" y="69" text-anchor="middle">
+                quality
+              </text>
+              <text class="svg-copy" x="330" y="91" text-anchor="middle">
+                just check + web build
+              </text>
+              <rect
+                class="node"
+                x="235"
+                y="138"
+                width="190"
+                height="70"
+                rx="8"
+              />
+              <text class="svg-title" x="330" y="167" text-anchor="middle">
+                containers
+              </text>
+              <text class="svg-copy" x="330" y="189" text-anchor="middle">
+                non-root image smoke
+              </text>
+              <rect
+                class="node"
+                x="235"
+                y="236"
+                width="190"
+                height="70"
+                rx="8"
+              />
+              <text class="svg-title" x="330" y="265" text-anchor="middle">
+                traceability
+              </text>
+              <text class="svg-copy" x="330" y="287" text-anchor="middle">
+                registry + negative tests
+              </text>
+
+              <rect
+                class="node-accent"
+                x="485"
+                y="116"
+                width="180"
+                height="114"
+                rx="8"
+              />
+              <text class="svg-title" x="575" y="146" text-anchor="middle">
+                Release identity
+              </text>
+              <text class="svg-copy" x="575" y="170" text-anchor="middle">
+                GitHub OIDC from main
+              </text>
+              <text class="svg-label" x="575" y="193" text-anchor="middle">
+                ACR Reader + AcrPush
+              </text>
+              <text class="svg-label" x="575" y="212" text-anchor="middle">
+                build immutable digests
+              </text>
+
+              <rect
+                class="node-external"
+                x="725"
+                y="40"
+                width="180"
+                height="70"
+                rx="8"
+              />
+              <text class="svg-title" x="815" y="69" text-anchor="middle">
+                Azure Container Registry
+              </text>
+              <text class="svg-copy" x="815" y="91" text-anchor="middle">
+                API and web digests
+              </text>
+
+              <rect
+                class="node"
+                x="725"
+                y="138"
+                width="180"
+                height="70"
+                rx="8"
+              />
+              <text class="svg-title" x="815" y="167" text-anchor="middle">
+                production approval
+              </text>
+              <text class="svg-copy" x="815" y="189" text-anchor="middle">
+                protected environment
+              </text>
+
+              <rect
+                class="node-accent"
+                x="725"
+                y="236"
+                width="180"
+                height="70"
+                rx="8"
+              />
+              <text class="svg-title" x="815" y="265" text-anchor="middle">
+                Deploy identity
+              </text>
+              <text class="svg-copy" x="815" y="287" text-anchor="middle">
+                Container Apps Contributor
+              </text>
+
+              <rect
+                class="node-external"
+                x="950"
+                y="92"
+                width="105"
+                height="74"
+                rx="8"
+              />
+              <text class="svg-title" x="1002" y="121" text-anchor="middle">
+                API app
+              </text>
+              <text class="svg-copy" x="1002" y="143" text-anchor="middle">
+                Container App
+              </text>
+
+              <rect
+                class="node-external"
+                x="950"
+                y="214"
+                width="105"
+                height="74"
+                rx="8"
+              />
+              <text class="svg-title" x="1002" y="243" text-anchor="middle">
+                Web app
+              </text>
+              <text class="svg-copy" x="1002" y="265" text-anchor="middle">
+                smoke boundary
+              </text>
+
+              <path
+                d="M180 173 L235 75"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#delivery-arrow)"
+              />
+              <path
+                d="M180 173 H235"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#delivery-arrow)"
+              />
+              <path
+                d="M180 173 L235 271"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#delivery-arrow)"
+              />
+              <path
+                d="M425 75 C460 75 450 173 485 173"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="2"
+                marker-end="url(#delivery-arrow-accent)"
+              />
+              <path
+                d="M425 173 H485"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="2"
+                marker-end="url(#delivery-arrow-accent)"
+              />
+              <path
+                d="M425 271 C460 271 450 173 485 173"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="2"
+                marker-end="url(#delivery-arrow-accent)"
+              />
+              <path
+                d="M665 145 L725 75"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#delivery-arrow)"
+              />
+              <path
+                d="M665 173 H725"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#delivery-arrow)"
+              />
+              <path
+                d="M815 208 V236"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="2"
+                marker-end="url(#delivery-arrow-accent)"
+              />
+              <path
+                d="M905 260 L950 251"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#delivery-arrow)"
+              />
+              <path
+                d="M905 260 L950 129"
+                fill="none"
+                stroke="var(--muted)"
+                stroke-width="1.7"
+                marker-end="url(#delivery-arrow)"
+              />
+            </svg>
+          </div>
+          <div class="callout">
+            <strong>Current artifact flow:</strong> CI builds and smoke-tests
+            local images, then the production workflow rebuilds both images from
+            the selected main commit before publishing digests. The CI-built
+            image objects themselves are not promoted.
+          </div>
+        </section>
+
+        <section id="paths">
+          <h2>Repository paths</h2>
+          <p class="section-intro">
+            Search by concern, then copy a path into Cursor Quick Open. The
+            descriptions state what is authoritative and what is generated.
+          </p>
+          <label for="path-search">Filter paths</label>
+          <input
+            class="search"
+            id="path-search"
+            type="search"
+            placeholder="Try: contracts, Sandcastle, identity, Azure..."
+          />
+          <div class="path-list" id="path-list">
+            <article class="path-item" data-search="domain vocabulary context">
+              <div>
+                <strong><code>CONTEXT.md</code></strong>
+                <small>Canonical product language and avoided terms.</small>
+              </div>
+              <button data-copy="CONTEXT.md">Copy</button>
+            </article>
+            <article class="path-item" data-search="python kernel primitives">
+              <div>
+                <strong><code>src/flash_trips/kernel/</code></strong>
+                <small>Framework-free domain primitives.</small>
+              </div>
+              <button data-copy="src/flash_trips/kernel/">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="use cases ports application"
+            >
+              <div>
+                <strong><code>src/flash_trips/application/</code></strong>
+                <small>Use-case interfaces and dependency ports.</small>
+              </div>
+              <button data-copy="src/flash_trips/application/">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="domain capabilities travel planning"
+            >
+              <div>
+                <strong><code>src/flash_trips/capabilities/</code></strong>
+                <small>Independent trip-planning domain modules.</small>
+              </div>
+              <button data-copy="src/flash_trips/capabilities/">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="platform approval evidence workflow reasoning"
+            >
+              <div>
+                <strong><code>src/flash_trips/platform/</code></strong>
+                <small>Shared planning mechanisms behind ports.</small>
+              </div>
+              <button data-copy="src/flash_trips/platform/">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="http postgres identity adapters"
+            >
+              <div>
+                <strong><code>src/flash_trips/adapters/</code></strong>
+                <small
+                  >Concrete HTTP, identity, telemetry, and database
+                  edges.</small
+                >
+              </div>
+              <button data-copy="src/flash_trips/adapters/">Copy</button>
+            </article>
+            <article class="path-item" data-search="composition wiring fastapi">
+              <div>
+                <strong><code>src/flash_trips/composition/</code></strong>
+                <small>FastAPI construction and concrete wiring.</small>
+              </div>
+              <button data-copy="src/flash_trips/composition/">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="next web bff planner operator"
+            >
+              <div>
+                <strong><code>apps/web/</code></strong>
+                <small>Next.js UI, BFF routes, and server policy.</small>
+              </div>
+              <button data-copy="apps/web/">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="openapi generated typescript client contracts"
+            >
+              <div>
+                <strong><code>contracts/</code></strong>
+                <small>Generated OpenAPI document and TypeScript client.</small>
+              </div>
+              <button data-copy="contracts/">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="tests contract boundaries persistence"
+            >
+              <div>
+                <strong><code>tests/</code></strong>
+                <small
+                  >Architecture, HTTP, persistence, and automation tests.</small
+                >
+              </div>
+              <button data-copy="tests/">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="sandcastle autopilot agents prompts"
+            >
+              <div>
+                <strong><code>.sandcastle/</code></strong>
+                <small
+                  >AFK orchestrator, prompts, Docker image, and tests.</small
+                >
+              </div>
+              <button data-copy=".sandcastle/">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="github ci production workflows"
+            >
+              <div>
+                <strong><code>.github/workflows/</code></strong>
+                <small>Required CI and protected production delivery.</small>
+              </div>
+              <button data-copy=".github/workflows/">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="azure bicep infrastructure deployment"
+            >
+              <div>
+                <strong><code>infra/azure/</code></strong>
+                <small>Production Azure resource definitions and RBAC.</small>
+              </div>
+              <button data-copy="infra/azure/">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="requirements traceability registry"
+            >
+              <div>
+                <strong><code>requirements/</code></strong>
+                <small>Requirement ownership and generated coverage.</small>
+              </div>
+              <button data-copy="requirements/">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="architecture rules import linter"
+            >
+              <div>
+                <strong><code>.importlinter</code></strong>
+                <small>Executable Python module dependency rules.</small>
+              </div>
+              <button data-copy=".importlinter">Copy</button>
+            </article>
+            <article
+              class="path-item"
+              data-search="adrs decisions architecture"
+            >
+              <div>
+                <strong><code>docs/adr/README.md</code></strong>
+                <small>Architecture decision index.</small>
+              </div>
+              <button data-copy="docs/adr/README.md">Copy</button>
+            </article>
+          </div>
+        </section>
+
+        <footer>
+          This map describes the checked-in scaffold as of September 2026.
+          Executable boundaries in <code>.importlinter</code>, tests, and
+          workflows take precedence if this document drifts.
+        </footer>
+      </main>
+    </div>
+
+    <script>
+      const links = [...document.querySelectorAll("nav a")];
+      const sections = links
+        .map((link) => document.querySelector(link.getAttribute("href")))
+        .filter(Boolean);
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const visible = entries
+            .filter((entry) => entry.isIntersecting)
+            .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+          if (!visible) return;
+          links.forEach((link) => {
+            link.classList.toggle(
+              "active",
+              link.getAttribute("href") === `#${visible.target.id}`,
+            );
+          });
+        },
+        { rootMargin: "-15% 0px -70% 0px", threshold: [0, 0.2, 0.6] },
+      );
+      sections.forEach((section) => observer.observe(section));
+
+      const search = document.querySelector("#path-search");
+      const pathItems = [...document.querySelectorAll(".path-item")];
+      search.addEventListener("input", () => {
+        const query = search.value.toLowerCase().trim();
+        pathItems.forEach((item) => {
+          item.hidden =
+            !item.textContent.toLowerCase().includes(query) &&
+            !item.dataset.search.includes(query);
+        });
+      });
+
+      document.querySelectorAll("[data-copy]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const path = button.dataset.copy;
+          try {
+            if (!navigator.clipboard?.writeText) throw new Error();
+            await navigator.clipboard.writeText(path);
+          } catch {
+            window.prompt("Copy this path into Cursor Quick Open:", path);
+          }
+          const previous = button.textContent;
+          button.textContent = "Copied";
+          window.setTimeout(() => {
+            button.textContent = previous;
+          }, 1200);
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -217,12 +217,17 @@ SUBSCRIPTION_ID="$(az account show --query id --output tsv)"
 TENANT_ID="$(az account show --query tenantId --output tsv)"
 SUBSCRIPTION_NAME="$(az account show --query name --output tsv)"
 REPOSITORY="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+GITHUB_SUBJECT_PREFIX="$(gh api \
+  "repos/$REPOSITORY/actions/oidc/customization/sub" \
+  --jq .sub_claim_prefix)"
 [[ "$SUBSCRIPTION_ID" == "$EXPECTED_SUBSCRIPTION_ID" ]] ||
   fail "Active subscription is $SUBSCRIPTION_ID, expected $EXPECTED_SUBSCRIPTION_ID"
 [[ "$TENANT_ID" == "$EXPECTED_TENANT_ID" ]] ||
   fail "Active tenant is $TENANT_ID, expected $EXPECTED_TENANT_ID"
 [[ "$REPOSITORY" == "Tirso0882/flash-trips" ]] ||
   fail "Current repository is $REPOSITORY, expected Tirso0882/flash-trips"
+[[ "$GITHUB_SUBJECT_PREFIX" == repo:* ]] ||
+  fail "GitHub returned an invalid OIDC subject prefix"
 say "Azure subscription: $SUBSCRIPTION_NAME ($SUBSCRIPTION_ID)"
 say "Azure tenant: $TENANT_ID"
 say "GitHub repository: $REPOSITORY"
@@ -258,7 +263,7 @@ az deployment sub what-if \
   --template-file "$TEMPLATE_FILE" \
   --parameters \
     githubEnvironment="$GITHUB_ENVIRONMENT" \
-    githubRepository="$REPOSITORY" \
+    githubSubjectPrefix="$GITHUB_SUBJECT_PREFIX" \
     location="$AZURE_LOCATION" \
     resourceGroupName="$RESOURCE_GROUP"
 confirm "Does the preview match the approved app baseline?" ||
@@ -274,7 +279,7 @@ DEPLOYMENT_JSON="$(az deployment sub create \
   --template-file "$TEMPLATE_FILE" \
   --parameters \
     githubEnvironment="$GITHUB_ENVIRONMENT" \
-    githubRepository="$REPOSITORY" \
+    githubSubjectPrefix="$GITHUB_SUBJECT_PREFIX" \
     location="$AZURE_LOCATION" \
     resourceGroupName="$RESOURCE_GROUP" \
   --output json)"

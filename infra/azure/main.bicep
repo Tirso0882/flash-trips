@@ -3,8 +3,8 @@ targetScope = 'resourceGroup'
 @description('Azure region for all production resources.')
 param location string = resourceGroup().location
 
-@description('GitHub repository in owner/name form.')
-param githubRepository string
+@description('GitHub OIDC subject prefix reported by the repository settings API.')
+param githubSubjectPrefix string
 
 @description('GitHub Environment that protects production deployment.')
 param githubEnvironment string = 'production'
@@ -34,6 +34,10 @@ var acrPullRoleDefinitionId = subscriptionResourceId(
 var acrPushRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '8311e382-0749-4cb8-b61a-304f252e45ec'
+)
+var readerRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  'acdd72a7-3385-48ef-bd42-f606fba81ae7'
 )
 var containerAppsContributorRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
@@ -152,7 +156,7 @@ resource releaseFederation 'Microsoft.ManagedIdentity/userAssignedIdentities/fed
       'api://AzureADTokenExchange'
     ]
     issuer: 'https://token.actions.githubusercontent.com'
-    subject: 'repo:${githubRepository}:ref:refs/heads/main'
+    subject: '${githubSubjectPrefix}:ref:refs/heads/main'
   }
 }
 
@@ -164,7 +168,7 @@ resource deployFederation 'Microsoft.ManagedIdentity/userAssignedIdentities/fede
       'api://AzureADTokenExchange'
     ]
     issuer: 'https://token.actions.githubusercontent.com'
-    subject: 'repo:${githubRepository}:environment:${githubEnvironment}'
+    subject: '${githubSubjectPrefix}:environment:${githubEnvironment}'
   }
 }
 
@@ -175,6 +179,16 @@ resource releaseAcrPush 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     principalId: releaseIdentity.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: acrPushRoleDefinitionId
+  }
+}
+
+resource releaseAcrReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(registry.id, releaseIdentity.id, readerRoleDefinitionId)
+  scope: registry
+  properties: {
+    principalId: releaseIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: readerRoleDefinitionId
   }
 }
 

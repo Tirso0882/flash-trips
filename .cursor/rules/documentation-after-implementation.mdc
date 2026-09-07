@@ -1,0 +1,34 @@
+---
+description: Review and update developer documentation after implementation work
+alwaysApply: true
+---
+
+# Documentation after implementation
+
+Before handing off an implementation, assess its documentation impact.
+
+Update documentation in the same change when the implementation alters:
+
+- setup, commands, configuration, environment variables, or operations;
+- a developer-facing interface, workflow, repository path, or generated contract;
+- runtime, module, data, security, automation, CI, or deployment relationships;
+- whether a capability is implemented, connected, planned, or intentionally absent.
+
+Use the existing sources:
+
+- `README.md` for setup, common commands, operating instructions, and wayfinding;
+- `docs/architecture.html` for system relationships, flows, maturity, and navigation;
+- `docs/adr/` only when the work makes or supersedes a lasting architecture decision.
+
+Keep documentation proportional. Internal changes that preserve every documented
+interface and relationship need no documentation edit.
+
+When editing architecture documentation:
+
+- distinguish current behavior from planned architecture;
+- link or name the authoritative code and configuration paths;
+- keep the HTML self-contained and navigable;
+- remove stale statements instead of layering corrections beside them.
+
+Validate changed documentation, links, and formatting. In the final handoff,
+state which documentation changed, or state that the review found no impact.
