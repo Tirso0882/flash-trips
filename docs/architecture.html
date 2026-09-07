@@ -681,6 +681,17 @@
             <article class="panel">
               <h3>Defined but not connected</h3>
               <p>
+                <code>JwtAccessTokenVerifier</code> in
+                <code>src/flash_trips/adapters/identity/access_tokens.py</code>
+                verifies signed access tokens against an issuer, audience,
+                required scope, algorithm allowlist, and served JWKS, and is
+                proven against the deterministic local issuer in
+                <code>tests/identity/</code>. No runtime setting supplies those
+                values yet, so <code>create_app</code> still composes the
+                fail-closed <code>RejectingAccessTokenVerifier</code> until the
+                live provider lands.
+              </p>
+              <p>
                 The PostgreSQL adapter implements the principal-scoped Planner
                 repository and unit of work behind a reversible Alembic
                 migration, but it does not yet participate in a request flow.

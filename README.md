@@ -52,13 +52,17 @@ hand.
 - `just typecheck`: strict Python and TypeScript checks
 - `just contracts`: regenerate OpenAPI and `@flash-trips/api-client`
 - `just contracts-check`: fail when committed generated contracts drift
-- `just test`: contract, persistence, and traceability tests
+- `just test`: contract, identity, persistence, and traceability tests
 - `just containers`: build both non-root OCI images
 - `just verify`: run lint, type checks, and tests during development
 - `just check`: run the complete non-container quality suite
 
 Persistence tests use real PostgreSQL. They skip only when `DATABASE_URL` and
 `MIGRATION_DATABASE_URL` are absent. CI and `.env.example` provide both values.
+
+Identity tests under `tests/identity/` mint tokens with an in-process issuer
+that serves its JWKS on a loopback listener. That listener is the only socket
+the default suite may open; every other test runs with sockets disabled.
 
 Local and CI configuration grants zero live-call authority. Identity, model,
 travel-provider, and Azure calls are outside this scaffold.

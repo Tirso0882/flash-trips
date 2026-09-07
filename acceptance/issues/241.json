@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "issue": 241,
+  "title": "Verify real access tokens against a deterministic local issuer",
+  "outcome": "Added signed access-token verification against a hermetic local issuer and proved that only verified identity claims reach the protected endpoint.",
+  "checks": [
+    {
+      "name": "signed access-token verification contract",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/identity/test_access_tokens.py",
+        "tests/contract/test_hermetic_network.py"
+      ]
+    }
+  ]
+}
