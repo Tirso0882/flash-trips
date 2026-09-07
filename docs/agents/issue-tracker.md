@@ -23,11 +23,11 @@ When set to `yes`, PRs use the equivalent `gh pr` operations and the same triage
 
 The tracker holds two kinds, and the title prefix declares which:
 
-A **Feature** is the unit that owns requirements. It carries the acceptance criteria, the entry in `requirements/registry.json`, and the `FT-*` or `E-*` prefix. It closes when its last Task closes.
+A **Feature** is the unit that owns requirements. It carries the acceptance criteria, the entry in `requirements/registry.json`, and the `FT-*` or `E-*` prefix. Its pull request closes it after the last Task and any final human review complete.
 
 A **Task** is the unit of agent work. It restates every criterion it must satisfy, names the seams under test, and carries the `T-*` prefix. It must fit one agent session inside 100K tokens.
 
-Tasks are flat. A Task that needs sub-issues is a Feature that was cut too coarsely; split it into peer Tasks instead. Tasks run in list order under their Feature, so order them such that each one's dependencies are already closed.
+Tasks are flat. A Task that needs sub-issues is a Feature that was cut too coarsely; split it into peer Tasks instead. Native dependencies define execution order. Independent Tasks under one Feature may run concurrently.
 
 Roadmap grouping is not a Feature. Release sequencing is a GitHub milestone, which is not an issue and so can never be picked up. The product charter stays an issue, because `requirements/registry.json` sources most requirements to it, and it carries the `roadmap` label instead.
 
@@ -39,8 +39,8 @@ Refuse a ticket labelled `roadmap` before reading the graph. Sequencing and char
 
 | Graph shape | How it runs |
 | --- | --- |
-| Has sub-issues | Never implemented directly. Its Tasks run in order onto one shared branch, and that branch opens one pull request |
-| Has a parent, no sub-issues | One agent session, on its Feature's branch |
+| Has sub-issues | Never implemented directly. Its Tasks integrate into one Feature branch, and that branch opens one pull request |
+| Has a parent, no sub-issues | One agent session on `sandcastle/task-{Task}` |
 | Neither | One agent session, on its own branch |
 
 A Feature that has no Tasks yet is not workable, however small it looks. Decompose it first. `ready-for-agent` is what holds this line: the pipeline honours `agent:implement` only on a ticket that also carries `ready-for-agent`, and only a Task body can satisfy the four requirements below. So `ready-for-agent` belongs on Tasks, never on the Feature above them.
@@ -68,10 +68,12 @@ Two label families, answering two different questions.
 
 The **triage labels** describe how well a ticket is specified. See `docs/agents/triage-labels.md`.
 
-The `agent:*` labels describe where a ticket sits in the pipeline. Humans apply `agent:implement`, `agent:explore`, `agent:review`, and `agent:queued`; automation owns the rest.
+The `agent:*` labels describe where a ticket sits in the pipeline. Humans apply `agent:autopilot`, `agent:implement`, `agent:explore`, `agent:review`, and `agent:queued`; automation owns the rest.
 
 | Label | Meaning |
 | --- | --- |
+| `agent:autopilot` | Opt a parent Feature into automatic Task authorization and scheduled execution |
+| `agent:gates-cleared` | Confirm that one Task's external pre-run gates and disposable credentials are ready |
 | `agent:implement` | Work this now. Honoured only alongside `ready-for-agent` |
 | `agent:queued` | Work this once its blockers close. Promoted to `agent:implement` automatically |
 | `agent:explore` | Run the exploration pass and post the findings |
@@ -80,6 +82,41 @@ The `agent:*` labels describe where a ticket sits in the pipeline. Humans apply 
 | `agent:blocked` | The last run refused or failed. The comment carries the reason |
 
 One label sits outside both families. `roadmap` marks a sequencing or charter ticket, and every workflow refuses it outright.
+
+`agent:autopilot` is persistent spending, publication, and pull-request
+authorization for one Feature. Sandcastle authorizes its dependency-ready
+frontier and may run independent Tasks concurrently within the global
+three-Task cap. Each Task has `sandcastle/task-{Task}`. Reviewed Tasks integrate
+into `sandcastle/feature-{Feature}`, which owns one draft pull request into the
+checked-out base branch. A Task closes only after the remote Feature tree and
+pull request are verified. The pull request becomes ready when no agent Task
+remains. Remove `agent:autopilot` to stop new claims; a claimed Task finishes.
+
+## External gates and Task credentials
+
+A Task with a non-empty `## External human or evidence gates` section requires
+`agent:gates-cleared`. Use that section only for pre-run gates. Put approval of
+an artefact that does not exist yet in a later `ready-for-human` Task.
+
+Credential names go in an exact, names-only section:
+
+```md
+## AFK environment
+
+- FLASH_TRIPS_OIDC_CLIENT_ID
+- FLASH_TRIPS_OIDC_CLIENT_SECRET
+```
+
+The operator puts values in the process environment or `.sandcastle/.env` and
+adds the names to `SANDCASTLE_TASK_ENV_ALLOWLIST`. Sandcastle checks the label,
+allowlist, and non-empty values before authorization and again before claim. It
+passes only those variables to that Task sandbox. `GH_TOKEN`, `GITHUB_TOKEN`,
+and `CURSOR_API_KEY` can never be Task environment entries. Secret values never
+enter prompts, comments, logs, or run state.
+
+If Sandcastle already marked the Task `agent:blocked`, apply
+`agent:gates-cleared`, remove `agent:blocked`, and leave `ready-for-agent` in
+place after the gate is prepared.
 
 ## Who writes to the tracker
 

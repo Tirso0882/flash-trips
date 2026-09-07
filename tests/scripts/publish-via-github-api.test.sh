@@ -66,6 +66,7 @@ fi
 
 if [[ "$1" == "pr" && "$2" == "ready" ]]; then
   touch "$FAKE_GH_STATE_DIR/pr-ready"
+  rm -f "$FAKE_GH_STATE_DIR/pr-draft"
   exit 0
 fi
 
@@ -99,9 +100,12 @@ while (($#)); do
 done
 
 case "$endpoint" in
+  */git/ref/heads/*)
+    printf '%s\n' "$FAKE_BASE_SHA"
+    ;;
   */git/matching-refs/heads/*)
     if [[ -f "$FAKE_GH_STATE_DIR/ref" ]]; then
-      printf '[{"ref":"refs/heads/feature/publisher","object":{"sha":"api-commit"}}]\n'
+      printf '[{"ref":"refs/heads/%s","object":{"sha":"api-commit"}}]\n' "${FAKE_REMOTE_BRANCH:-feature/publisher}"
     else
       printf '[]\n'
     fi
@@ -141,6 +145,16 @@ case "$endpoint" in
       printf '[]\n'
     fi
     ;;
+  */pulls/*)
+    if [[ "$method" == "PATCH" ]]; then
+      touch "$FAKE_GH_STATE_DIR/pr-updated"
+    else
+      draft=false
+      [[ ! -f "$FAKE_GH_STATE_DIR/pr-draft" ]] || draft=true
+      printf '{"head":{"ref":"%s"},"base":{"ref":"%s"},"html_url":"https://github.com/Tirso0882/flash-trips/pull/99","draft":%s}\n' \
+        "${FAKE_REMOTE_BRANCH:-feature/publisher}" "${FAKE_PR_BASE:-main}" "$draft"
+    fi
+    ;;
   *)
     printf 'unexpected fake gh endpoint: %s\n' "$endpoint" >&2
     exit 2
@@ -173,6 +187,9 @@ fake_gh="$(make_fake_gh)"
 mkdir -p "$test_root/fake-state"
 export FAKE_GH_STATE_DIR="$test_root/fake-state"
 export FAKE_LOCAL_TREE="$(git -C "$publish_repo" rev-parse 'HEAD^{tree}')"
+export FAKE_BASE_SHA="$(git -C "$publish_repo" rev-parse main)"
+export FAKE_REMOTE_BRANCH="feature/publisher"
+export FAKE_PR_BASE="main"
 
 if ! (cd "$publish_repo" && PUBLISH_GH_BIN="$fake_gh" "$publisher" --draft-pr --allow-dirty >"$test_root/first.out" 2>&1); then
   sed -n '1,80p' "$test_root/first.out" >&2
@@ -193,5 +210,29 @@ assert_contains "$test_root/second.out" "Reusing existing PR #99"
 (cd "$publish_repo" && PUBLISH_GH_BIN="$fake_gh" "$publisher" --pr --allow-dirty >"$test_root/ready.out" 2>&1)
 [[ -f "$FAKE_GH_STATE_DIR/pr-ready" ]] || fail "--pr did not mark the draft ready"
 assert_contains "$test_root/ready.out" "Marked existing PR #99 ready"
+
+rm -rf "$FAKE_GH_STATE_DIR"
+mkdir -p "$FAKE_GH_STATE_DIR"
+export FAKE_REMOTE_BRANCH="sandcastle/feature-117"
+export FAKE_PR_BASE="dev"
+source_sha="$(git -C "$publish_repo" rev-parse HEAD)"
+(cd "$publish_repo" && PUBLISH_GH_BIN="$fake_gh" "$publisher" \
+  --draft-pr \
+  --source "$source_sha" \
+  --branch "$FAKE_REMOTE_BRANCH" \
+  --base dev \
+  --title "Feature 117" \
+  --body "Closes #117" \
+  --json >"$test_root/json.out")
+jq -e \
+  '.branch == "sandcastle/feature-117"
+   and .base == "dev"
+   and .localCommit == $source
+   and .tree == $tree
+   and .prNumber == 99
+   and .draft == true' \
+  --arg source "$source_sha" \
+  --arg tree "$FAKE_LOCAL_TREE" \
+  "$test_root/json.out" >/dev/null || fail "structured publication receipt is invalid"
 
 printf 'PASS: publish-via-github-api\n'

@@ -6,6 +6,7 @@
     "prototype:planner": "python3 -m http.server 4173 --directory docs/prototypes",
     "sandcastle": "pnpm exec tsx .sandcastle/main.mts",
     "sandcastle:check": "tsc --project .sandcastle/tsconfig.json",
+    "test:acceptance": "node --test tests/acceptance/accept-issue.test.mjs",
     "test:sandcastle": "node --import tsx --test .sandcastle/main.test.mts",
     "traceability": "node scripts/traceability.mjs",
     "test:traceability": "node --test tests/traceability/traceability.test.mjs",

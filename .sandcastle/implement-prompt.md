@@ -2,7 +2,9 @@
 
 Implement issue {{TASK_ID}}: {{ISSUE_TITLE}}
 
-Work on branch {{BRANCH}}. That branch may already carry work from earlier Tasks under the same Feature. Build on it; do not reset it.
+Work on branch {{BRANCH}}. This branch belongs only to this Task. Its base
+contains the last published integration for the parent Feature. Independent
+sibling Tasks may run at the same time, so do not absorb their scope.
 
 Only work on the issue specified. If you finish early, stop.
 
@@ -82,6 +84,36 @@ Python is Pyright strict and Ruff with `E,F,I,UP,B,SIM,RUF,S`. TypeScript is str
 Use `just verify` as the iteration loop. Run `just check` before committing: it adds the security audit and the generated-contracts staleness check, and the ticket's own criteria almost always include `just check` passing.
 
 If a requirement ID moved or a source changed, `pnpm traceability` reconciles `requirements/registry.json` against `requirements/coverage.md`, and it runs inside `just lint`.
+
+# TICKET ACCEPTANCE
+
+Register a short, repeatable acceptance check in
+`acceptance/issues/{{TASK_ID}}.json`. Use schema version 1, the numeric issue
+ID, the issue title without its Task prefix, one plain-language outcome
+sentence, and one or more focused checks:
+
+```json
+{
+  "schema_version": 1,
+  "issue": 239,
+  "title": "Establish the authenticated principal contract",
+  "outcome": "Added a protected endpoint that returns redacted identity data and safe authentication problems.",
+  "checks": [
+    {
+      "name": "authenticated principal HTTP contract",
+      "command": ["uv", "run", "pytest", "-q", "tests/contract/test_http_principal.py"]
+    }
+  ]
+}
+```
+
+Commands are argument arrays, not shell strings. Keep them hermetic and focused
+on the public Seams named by the Task. Prefer browser-level checks for
+user-visible behavior and HTTP or contract checks for backend-only behavior.
+Do not put setup instructions or a second specification in the manifest.
+
+Run `just accept {{TASK_ID}}` before the final gate. A successful run must print
+only the title, the one-sentence outcome, and PASS.
 
 # COMMIT
 

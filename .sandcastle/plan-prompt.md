@@ -17,7 +17,9 @@ that authorised list.
 
 # TASK
 
-Select the tickets that can be worked right now, in parallel, without conflicting with each other.
+Select the Tasks that can be worked right now, in parallel, without conflicting
+with each other. The host has already checked external gates and Task
+environment requirements. Never infer credentials from the issue text.
 
 Select at most {{MAX_PARALLEL_ISSUES}} tickets. If more tickets are equally workable after applying the conflict rules, prefer lower issue numbers so repeated plans are deterministic.
 
@@ -46,19 +48,21 @@ Beyond that, treat a ticket as blocked if it would collide with another ticket y
 
 Branch names must be deterministic, so that re-planning the same ticket produces the same branch and accumulated work is preserved.
 
-- A Task with a parent Feature goes on its Feature's branch: `sandcastle/issue-{parent}`.
-- A ticket with no parent goes on its own branch: `sandcastle/issue-{number}`.
+- Every Task goes on its own branch: `sandcastle/task-{number}`.
 
 No slug, no suffix.
 
-**Select at most one Task per parent Feature per round.** Tasks under a Feature share one branch and are ordered so each one's dependencies close first, so running two of them concurrently in separate sandboxes would fork the same branch. When several Tasks under the same Feature are unblocked, take the lowest-numbered one and leave the rest for the next round.
+Independent Tasks under one Feature may be selected together. Native
+`blockedBy` dependencies still control the dependency-ready frontier. If two
+siblings are likely to collide in the same files or establish competing API
+shapes, select the lower-numbered Task and leave the other for a later round.
 
 # OUTPUT
 
 Output your plan as a JSON object wrapped in `<plan>` tags:
 
 <plan>
-{"issues": [{"id": "239", "title": "[T-01] Establish the authenticated principal contract and protected route seam", "branch": "sandcastle/issue-117"}]}
+{"issues": [{"id": "240", "title": "[T-02] Establish the persistence foundation and the Planner record", "branch": "sandcastle/task-240"}]}
 </plan>
 
 Include only the tickets you selected. If every ticket is blocked, output the empty plan rather than forcing a choice: a blocked ticket worked early is a wasted branch, and the next round will pick it up once its blocker closes.

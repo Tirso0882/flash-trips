@@ -20,6 +20,7 @@ Scope note: rules that a tool already enforces are listed only where a reviewer 
 - Tests requiring real PostgreSQL carry the `persistence` marker and live in `tests/persistence/`. Boundary and conformance tests live in `tests/contract/`.
 - No live provider, model, or judge calls in the default suite, and no evaluation results committed.
 - Test names say the expected behaviour, not the function under test.
+- Every Task registers `acceptance/issues/<issue>.json` with a short outcome and focused, hermetic commands through its named Seams. `just accept <issue>` passes and reports exactly three summary lines on success.
 
 ## Architecture
 

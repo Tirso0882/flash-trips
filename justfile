@@ -33,6 +33,7 @@ security:
 
 test:
     uv run pytest
+    pnpm test:acceptance
     pnpm test:sandcastle
     pnpm test:traceability
     pnpm test:web-boundaries
@@ -47,6 +48,9 @@ contracts-check:
 
 migrate:
     uv run alembic upgrade head
+
+accept issue:
+    @node scripts/accept-issue.mjs "{{issue}}"
 
 eval-layer1:
     uv run pytest tests/contract

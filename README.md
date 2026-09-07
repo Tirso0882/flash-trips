@@ -43,3 +43,20 @@ Persistence tests use real PostgreSQL. They skip only when `DATABASE_URL` and
 
 Local and CI configuration grants zero live-call authority. Identity, model,
 travel-provider, and Azure calls are outside this scaffold.
+
+## Sandcastle autopilot
+
+Applying `agent:autopilot` to a parent Feature authorizes Sandcastle to process
+its dependency-ready Tasks. It runs up to three independent Tasks at once on
+Task-local branches, integrates them into one Feature branch, and opens or
+updates a draft Feature pull request into the checked-out base branch. A Task
+closes only after that remote branch and pull request are verified.
+
+Set `SANDCASTLE_TASK_BUDGET` and `SANDCASTLE_TIME_BUDGET_MINUTES` in
+`.sandcastle/.env` to bound one AFK run. A Task with external pre-run gates
+also needs `agent:gates-cleared`. If it declares an `## AFK environment`
+section, allowlist those variable names with `SANDCASTLE_TASK_ENV_ALLOWLIST`.
+Sandcastle passes only those configured values to that Task sandbox.
+The checked-out base must be clean and its Git tree must already match the
+remote branch. Publish `dev` before starting Sandcastle when local base changes
+have not reached its existing pull request.

@@ -1,6 +1,7 @@
 # TASK
 
-Merge the following reviewed commits into the current integration branch:
+Merge the following reviewed Task commits into the current Feature integration
+branch:
 
 {{BRANCHES}}
 
@@ -8,7 +9,9 @@ They correspond to these issues:
 
 {{ISSUES}}
 
-The branch names are context only. The pinned commit SHAs are authoritative.
+The Task branch names are context only. The pinned commit SHAs are
+authoritative. Several commits can belong to independent Tasks under one
+Feature.
 For each entry, in order:
 
 1. Run `git merge <pinned-sha> --no-edit`
@@ -46,7 +49,9 @@ carries the source commits.
 
 # DO NOT WRITE TO THE TRACKER
 
-Do not close issues, move labels, or comment. The orchestrator closes each issue itself, after verifying that the branch actually landed in the current branch. That check is the reason the close is trustworthy, and it cannot run from in here.
+Do not close issues, move labels, publish branches, or comment. The orchestrator
+publishes the verified Feature branch and closes each Task only after it
+validates the remote tree and pull request.
 
 In your final message, state plainly which branches merged and which you skipped, so the skipped ones are not mistaken for done.
 

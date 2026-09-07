@@ -7,15 +7,16 @@
 //                               createSandbox(). The implementer runs first
 //                               and an independent reviewer gates its commits.
 //                               Issue pipelines run concurrently.
-//   Phase 3 (Merge):            A single agent merges all completed branches
-//                               into the current branch.
+//   Phase 3 (Publish):          Reviewed Task branches integrate into their
+//                               Feature branch, which is published to one PR.
 //
 // The agents only ever produce commits. Closing issues, moving labels, and
 // commenting are done here, by this file, from the validated plan and from
-// what git says actually landed. See docs/agents/issue-tracker.md.
+// verified local ancestry and remote publication receipts. See
+// docs/agents/issue-tracker.md.
 //
-// The outer loop repeats up to MAX_ROUNDS times so that newly unblocked
-// issues are picked up after each round of merges.
+// The outer loop repeats until no authorised work or the configured Task
+// budget remains.
 //
 // Usage:
 //   npx tsx .sandcastle/main.mts
@@ -44,12 +45,38 @@ import { z } from "zod";
 // Configuration
 // ---------------------------------------------------------------------------
 
-// A round exits early when no explicitly authorised work remains. The upper
-// bound prevents a bad tracker state from running forever.
-const MAX_ROUNDS = 10;
-
 // Keep local Docker use bounded even when many unrelated tickets are queued.
 const MAX_PARALLEL_ISSUES = 3;
+const DEFAULT_TASK_BUDGET = 30;
+const DEFAULT_TIME_BUDGET_MINUTES = 8 * 60;
+
+export function positiveIntegerSetting(
+  name: string,
+  fallback: number,
+  maximum: number,
+): number {
+  const raw = localConfiguration(name)?.trim();
+  if (!raw) return fallback;
+  if (!/^[1-9]\d*$/.test(raw)) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value > maximum) {
+    throw new Error(`${name} must not exceed ${maximum}.`);
+  }
+  return value;
+}
+
+const TASK_BUDGET = positiveIntegerSetting(
+  "SANDCASTLE_TASK_BUDGET",
+  DEFAULT_TASK_BUDGET,
+  1_000,
+);
+const TIME_BUDGET_MINUTES = positiveIntegerSetting(
+  "SANDCASTLE_TIME_BUDGET_MINUTES",
+  DEFAULT_TIME_BUDGET_MINUTES,
+  7 * 24 * 60,
+);
 
 // Match the course-video-manager AFK workflows: no individual agent may run
 // forever merely because it continues producing output. Sandcastle's idle
@@ -65,9 +92,12 @@ const IDLE_TIMEOUT_SECONDS = 10 * 60;
 const COMPLETION_TIMEOUT_SECONDS = 60;
 const HOOK_TIMEOUT_MS = 10 * 60 * 1_000;
 const HOST_COMMAND_TIMEOUT_MS = 2 * 60 * 1_000;
+const PUBLICATION_TIMEOUT_MS = 30 * 60 * 1_000;
 const DOCKER_IMAGE = "sandcastle:flash-trips";
 const RUN_STATE_PATH = ".sandcastle/run-state.json";
-const WHOLE_RUN_TIMEOUT_MS = 8 * 60 * 60 * 1_000;
+const WHOLE_RUN_TIMEOUT_MS = TIME_BUDGET_MINUTES * 60 * 1_000;
+const AUTOPILOT_LABEL = "agent:autopilot";
+const GATES_CLEARED_LABEL = "agent:gates-cleared";
 
 const lifecycleTimeouts = {
   copyToWorktreeMs: 10 * 60 * 1_000,
@@ -97,7 +127,7 @@ export const planSchema = z
         z.object({
           id: z.string().regex(/^[1-9]\d*$/),
           title: z.string().min(1),
-          branch: z.string().regex(/^sandcastle\/issue-[1-9]\d*$/),
+          branch: z.string().regex(/^sandcastle\/task-[1-9]\d*$/),
         }),
       )
       .max(MAX_PARALLEL_ISSUES),
@@ -123,12 +153,47 @@ export const planSchema = z
       }
       ids.add(issue.id);
       branches.add(issue.branch);
+      if (issue.branch !== `sandcastle/task-${issue.id}`) {
+        context.addIssue({
+          code: "custom",
+          message: `Issue ${issue.id} must use its own Task branch`,
+          path: ["issues", index, "branch"],
+        });
+      }
     }
   });
 
 type PlannedIssue = z.infer<typeof planSchema>["issues"][number];
-type ActiveClaim = PlannedIssue & { approvedSha?: string };
-type ApprovedIssue = { issue: PlannedIssue; sha: string };
+type PublicationReceipt = {
+  branch: string;
+  base: string;
+  localCommit: string;
+  remoteCommit: string;
+  tree: string;
+  prNumber: number;
+  prUrl: string;
+  draft: boolean;
+};
+type ActiveClaim = PlannedIssue & {
+  parent: number | null;
+  parentTitle: string | null;
+  integrationBranch: string;
+  approvedSha?: string;
+  publication?: PublicationReceipt;
+};
+type ClaimedIssue = ActiveClaim & { taskEnvironment: Record<string, string> };
+type ApprovedIssue = { issue: ClaimedIssue; sha: string };
+
+const publicationReceiptSchema = z.object({
+  branch: z.string().min(1),
+  base: z.string().min(1),
+  localCommit: z.string().regex(/^[0-9a-f]{40}$/),
+  remoteCommit: z.string().regex(/^[0-9a-f]{40}$/),
+  tree: z.string().regex(/^[0-9a-f]{40}$/),
+  prNumber: z.number().int().positive(),
+  prUrl: z.string().url(),
+  draft: z.boolean(),
+});
 
 const runStateSchema = z.object({
   targetBranch: z.string().min(1),
@@ -137,50 +202,77 @@ const runStateSchema = z.object({
     z.object({
       id: z.string().regex(/^[1-9]\d*$/),
       title: z.string().min(1),
-      branch: z.string().regex(/^sandcastle\/issue-[1-9]\d*$/),
+      branch: z.string().regex(/^sandcastle\/task-[1-9]\d*$/),
+      parent: z.number().int().positive().nullable().default(null),
+      parentTitle: z.string().nullable().default(null),
+      integrationBranch: z
+        .string()
+        .regex(/^sandcastle\/(?:feature|task)-[1-9]\d*$/)
+        .optional(),
       approvedSha: z
         .string()
         .regex(/^[0-9a-f]{40}$/)
         .optional(),
+      publication: publicationReceiptSchema.optional(),
     }),
   ),
-});
+}).transform((state) => ({
+  ...state,
+  issues: state.issues.map((issue) => ({
+    ...issue,
+    integrationBranch:
+      issue.integrationBranch ??
+      (issue.parent === null
+        ? issue.branch
+        : `sandcastle/feature-${issue.parent}`),
+  })),
+}));
 
 const reviewSchema = z.object({
   verdict: z.enum(["approved", "blocked"]),
   summary: z.string().min(1),
 });
 
-const queuedIssuesSchema = z.object({
-  hasNextPage: z.boolean(),
-  issues: z.array(
-    z.object({
-      id: z.number().int().positive(),
-      labels: z.array(z.string()),
-      blockedBy: z.array(z.number().int().positive()),
-      labelsTruncated: z.boolean(),
-      blockersTruncated: z.boolean(),
-    }),
-  ),
+const queuedIssueSchema = z.object({
+  id: z.number().int().positive(),
+  body: z.string(),
+  labels: z.array(z.string()),
+  blockedBy: z.array(z.number().int().positive()),
+  labelsTruncated: z.boolean(),
+  blockersTruncated: z.boolean(),
 });
 
-const authorizedIssuesSchema = z.object({
-  hasNextPage: z.boolean(),
-  issues: z.array(
-    z.object({
-      number: z.number().int().positive(),
-      title: z.string().min(1),
-      body: z.string(),
-      labels: z.array(z.string()),
-      parent: z.number().int().positive().nullable(),
-      parentTitle: z.string().nullable(),
-      subIssueCount: z.number().int().nonnegative(),
-      blockedBy: z.array(z.number().int().positive()),
-      labelsTruncated: z.boolean(),
-      blockersTruncated: z.boolean(),
-      comments: z.array(z.string()),
-    }),
-  ),
+const autopilotTaskSchema = z.object({
+  id: z.number().int().positive(),
+  body: z.string(),
+  state: z.enum(["OPEN", "CLOSED"]),
+  labels: z.array(z.string()),
+  subIssueCount: z.number().int().nonnegative(),
+  blockedBy: z.array(z.number().int().positive()),
+  labelsTruncated: z.boolean(),
+  blockersTruncated: z.boolean(),
+});
+
+const autopilotFeatureSchema = z.object({
+  id: z.number().int().positive(),
+  labels: z.array(z.string()),
+  labelsTruncated: z.boolean(),
+  tasksTruncated: z.boolean(),
+  tasks: z.array(autopilotTaskSchema),
+});
+
+const authorizedIssueSchema = z.object({
+  number: z.number().int().positive(),
+  title: z.string().min(1),
+  body: z.string(),
+  labels: z.array(z.string()),
+  parent: z.number().int().positive().nullable(),
+  parentTitle: z.string().nullable(),
+  subIssueCount: z.number().int().nonnegative(),
+  blockedBy: z.array(z.number().int().positive()),
+  labelsTruncated: z.boolean(),
+  blockersTruncated: z.boolean(),
+  comments: z.array(z.string()),
 });
 
 const issuePromptContextSchema = z.object({
@@ -257,26 +349,119 @@ function capture(command: string, args: string[]): string {
   }).trim();
 }
 
+function captureWithTimeout(
+  command: string,
+  args: string[],
+  timeout: number,
+): string {
+  return execFileSync(command, args, {
+    encoding: "utf8",
+    maxBuffer: 4 * 1024 * 1024,
+    timeout,
+  }).trim();
+}
+
 function describeError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.replace(/\s+/g, " ").trim().slice(0, 2_000);
 }
 
-function configured(name: string): boolean {
-  if (process.env[name]?.trim()) return true;
-  if (!existsSync(".sandcastle/.env")) return false;
+function localConfiguration(name: string): string | undefined {
+  const processValue = process.env[name]?.trim();
+  if (processValue) return processValue;
+  if (!existsSync(".sandcastle/.env")) return undefined;
 
   const assignment = new RegExp(
     `^\\s*(?:export\\s+)?${name}\\s*=\\s*(.+)\\s*$`,
   );
-  return readFileSync(".sandcastle/.env", "utf8")
+  const value = readFileSync(".sandcastle/.env", "utf8")
     .split("\n")
-    .some((line) => {
-      const value = line.match(assignment)?.[1]?.trim();
-      return (
-        value !== undefined && value !== "" && value !== '""' && value !== "''"
-      );
+    .map((line) => line.match(assignment)?.[1]?.trim())
+    .find((candidate) => candidate !== undefined);
+  if (!value || value === '""' || value === "''") return undefined;
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function configured(name: string): boolean {
+  return localConfiguration(name) !== undefined;
+}
+
+const forbiddenTaskEnvironment = new Set([
+  "CURSOR_API_KEY",
+  "GH_TOKEN",
+  "GITHUB_TOKEN",
+]);
+
+export function parseAfkEnvironment(body: string): string[] {
+  const heading = /^## AFK environment\s*$/m.exec(body);
+  if (!heading) return [];
+  const section = body
+    .slice(heading.index + heading[0].length)
+    .split(/^##\s+/m, 1)[0]!
+    .trim();
+  if (!section) throw new Error("AFK environment section is empty.");
+  const names = section
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = /^-\s+([A-Z][A-Z0-9_]*)$/.exec(line);
+      if (!match?.[1]) {
+        throw new Error(
+          "AFK environment entries must be bullet-listed variable names.",
+        );
+      }
+      return match[1];
     });
+  return [...new Set(names)].sort();
+}
+
+export function hasExternalPreRunGates(body: string): boolean {
+  const heading = /^## External human or evidence gates\s*$/m.exec(body);
+  if (!heading) return false;
+  return Boolean(
+    body
+      .slice(heading.index + heading[0].length)
+      .split(/^##\s+/m, 1)[0]!
+      .trim(),
+  );
+}
+
+export function resolveTaskEnvironment(body: string): Record<string, string> {
+  const requested = parseAfkEnvironment(body);
+  if (requested.length === 0) return {};
+  const allowed = new Set(
+    (localConfiguration("SANDCASTLE_TASK_ENV_ALLOWLIST") ?? "")
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean),
+  );
+  const resolved: Record<string, string> = {};
+  const errors: string[] = [];
+  for (const name of requested) {
+    if (forbiddenTaskEnvironment.has(name)) {
+      errors.push(`${name} is an orchestrator credential`);
+      continue;
+    }
+    if (!allowed.has(name)) {
+      errors.push(`${name} is not in SANDCASTLE_TASK_ENV_ALLOWLIST`);
+      continue;
+    }
+    const value = localConfiguration(name);
+    if (!value) {
+      errors.push(`${name} is not configured`);
+      continue;
+    }
+    resolved[name] = value;
+  }
+  if (errors.length > 0) throw new Error(errors.join("; "));
+  return resolved;
 }
 
 function runPreflight(): void {
@@ -349,7 +534,12 @@ function runPreflight(): void {
       .split("\n")
       .filter(Boolean),
   );
-  const requiredLabels = ["ready-for-agent", ...implementationLabels];
+  const requiredLabels = [
+    "ready-for-agent",
+    AUTOPILOT_LABEL,
+    GATES_CLEARED_LABEL,
+    ...implementationLabels,
+  ];
   const missingLabels = requiredLabels.filter((label) => !labels.has(label));
   if (missingLabels.length > 0) {
     throw new Error(
@@ -435,31 +625,61 @@ function gh(...args: string[]): boolean {
   }
 }
 
+function readPaginatedConnection<T>(
+  query: string,
+  jq: string,
+  itemSchema: z.ZodType<T>,
+  extraFields: string[] = [],
+): T[] {
+  const pageSchema = z.object({
+    hasNextPage: z.boolean(),
+    endCursor: z.string().nullable(),
+    items: z.array(itemSchema),
+  });
+  const items: T[] = [];
+  let cursor: string | null = null;
+  const seen = new Set<string>();
+  do {
+    const raw = capture("gh", [
+      "api",
+      "graphql",
+      "-f",
+      `query=${query}`,
+      "-F",
+      "owner=:owner",
+      "-F",
+      "repo=:repo",
+      ...extraFields,
+      ...(cursor === null ? [] : ["-F", `endCursor=${cursor}`]),
+      "--jq",
+      jq,
+    ]);
+    const page = pageSchema.parse(JSON.parse(raw));
+    items.push(...page.items);
+    if (!page.hasNextPage) break;
+    if (!page.endCursor || seen.has(page.endCursor)) {
+      throw new Error("GitHub pagination did not advance.");
+    }
+    seen.add(page.endCursor);
+    cursor = page.endCursor;
+  } while (true);
+  return items;
+}
+
 function readAuthorizedIssues(): string {
-  const raw = capture("gh", [
-    "api",
-    "graphql",
-    "-f",
-    'query=query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo){issues(states:OPEN,first:100,labels:["ready-for-agent","agent:implement"]){nodes{number title body labels(first:50){nodes{name} pageInfo{hasNextPage}} parent{number title} subIssues(first:1){totalCount} blockedBy(first:100){nodes{number state} pageInfo{hasNextPage}} comments(last:5){nodes{body}}} pageInfo{hasNextPage}}}}',
-    "-F",
-    "owner=:owner",
-    "-F",
-    "repo=:repo",
-    "--jq",
-    '{hasNextPage: .data.repository.issues.pageInfo.hasNextPage, issues: [.data.repository.issues.nodes[] | {number, title, body, labels: [.labels.nodes[].name], parent: (.parent.number // null), parentTitle: (.parent.title // null), subIssueCount: .subIssues.totalCount, blockedBy: [.blockedBy.nodes[] | select(.state == "OPEN") | .number], labelsTruncated: .labels.pageInfo.hasNextPage, blockersTruncated: .blockedBy.pageInfo.hasNextPage, comments: [.comments.nodes[].body]} | select((.labels | index("ready-for-agent")) != null and (.labels | index("agent:implement")) != null)]}',
-  ]);
-  const result = authorizedIssuesSchema.parse(JSON.parse(raw));
+  const issues = readPaginatedConnection(
+    'query($owner:String!,$repo:String!,$endCursor:String){repository(owner:$owner,name:$repo){issues(states:OPEN,first:100,after:$endCursor,labels:["ready-for-agent","agent:implement"]){nodes{number title body labels(first:50){nodes{name} pageInfo{hasNextPage}} parent{number title} subIssues(first:1){totalCount} blockedBy(first:100){nodes{number state} pageInfo{hasNextPage}} comments(last:5){nodes{body}}} pageInfo{hasNextPage endCursor}}}}',
+    '{hasNextPage: .data.repository.issues.pageInfo.hasNextPage, endCursor: .data.repository.issues.pageInfo.endCursor, items: [.data.repository.issues.nodes[] | {number, title, body, labels: [.labels.nodes[].name], parent: (.parent.number // null), parentTitle: (.parent.title // null), subIssueCount: .subIssues.totalCount, blockedBy: [.blockedBy.nodes[] | select(.state == "OPEN") | .number], labelsTruncated: .labels.pageInfo.hasNextPage, blockersTruncated: .blockedBy.pageInfo.hasNextPage, comments: [.comments.nodes[].body]} | select((.labels | index("ready-for-agent")) != null and (.labels | index("agent:implement")) != null)]}',
+    authorizedIssueSchema,
+  );
   if (
-    result.hasNextPage ||
-    result.issues.some(
-      (issue) => issue.labelsTruncated || issue.blockersTruncated,
-    )
+    issues.some((issue) => issue.labelsTruncated || issue.blockersTruncated)
   ) {
     throw new Error(
       "The authorised issue query was truncated. Refusing to give the planner incomplete tracker context.",
     );
   }
-  return JSON.stringify(result.issues, null, 2);
+  return JSON.stringify(issues, null, 2);
 }
 
 function readIssuePromptContext(issue: PlannedIssue): string {
@@ -541,11 +761,135 @@ function setPipelineLabel(
   );
 }
 
+type AutopilotFeature = z.infer<typeof autopilotFeatureSchema>;
+
+export function selectAutopilotAuthorizations(
+  features: AutopilotFeature[],
+): { id: string; label: ImplementationLabel; reason?: string }[] {
+  const refusedLabels = [
+    "roadmap",
+    "needs-info",
+    "ready-for-human",
+    "wontfix",
+    "agent:in-progress",
+    "agent:blocked",
+  ];
+  const authorizations: {
+    id: string;
+    label: ImplementationLabel;
+    reason?: string;
+  }[] = [];
+
+  for (const feature of [...features].sort((left, right) => left.id - right.id)) {
+    if (
+      !feature.labels.includes(AUTOPILOT_LABEL) ||
+      feature.labelsTruncated ||
+      feature.tasksTruncated
+    ) {
+      continue;
+    }
+
+    const tasks = feature.tasks
+      .filter((candidate) => candidate.state === "OPEN")
+      .sort((left, right) => left.id - right.id);
+    for (const task of tasks) {
+      if (
+        !task.labels.includes("ready-for-agent") ||
+        refusedLabels.some((label) => task.labels.includes(label)) ||
+        implementationLabels.some((label) => task.labels.includes(label)) ||
+        task.subIssueCount > 0 ||
+        task.labelsTruncated ||
+        task.blockersTruncated
+      ) {
+        continue;
+      }
+      if (
+        hasExternalPreRunGates(task.body) &&
+        !task.labels.includes(GATES_CLEARED_LABEL)
+      ) {
+        authorizations.push({
+          id: String(task.id),
+          label: "agent:blocked",
+          reason: `Task #${task.id} has external pre-run gates. Apply ${GATES_CLEARED_LABEL} only after its disposable resources and credentials are ready.`,
+        });
+        continue;
+      }
+      authorizations.push({
+        id: String(task.id),
+        label: task.blockedBy.length > 0 ? "agent:queued" : "agent:implement",
+      });
+    }
+  }
+
+  return authorizations;
+}
+
+function authorizeAutopilotTasks(): void {
+  let features: AutopilotFeature[];
+  try {
+    features = readPaginatedConnection(
+      `query($owner:String!,$repo:String!,$endCursor:String){repository(owner:$owner,name:$repo){issues(states:OPEN,first:100,after:$endCursor,labels:["${AUTOPILOT_LABEL}"]){nodes{number labels(first:50){nodes{name} pageInfo{hasNextPage}} subIssues(first:100){nodes{number body state labels(first:50){nodes{name} pageInfo{hasNextPage}} subIssues(first:1){totalCount} blockedBy(first:100){nodes{number state} pageInfo{hasNextPage}}} pageInfo{hasNextPage}}} pageInfo{hasNextPage endCursor}}}}`,
+      '{hasNextPage: .data.repository.issues.pageInfo.hasNextPage, endCursor: .data.repository.issues.pageInfo.endCursor, items: [.data.repository.issues.nodes[] | {id: .number, labels: [.labels.nodes[].name], labelsTruncated: .labels.pageInfo.hasNextPage, tasksTruncated: .subIssues.pageInfo.hasNextPage, tasks: [.subIssues.nodes[] | {id: .number, body, state, labels: [.labels.nodes[].name], subIssueCount: .subIssues.totalCount, blockedBy: [.blockedBy.nodes[] | select(.state == "OPEN") | .number], labelsTruncated: .labels.pageInfo.hasNextPage, blockersTruncated: .blockedBy.pageInfo.hasNextPage}]}]}',
+      autopilotFeatureSchema,
+    );
+    for (const feature of features) {
+      if (!feature.tasksTruncated) continue;
+      feature.tasks = readPaginatedConnection(
+        "query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$repo){issue(number:$number){subIssues(first:100,after:$endCursor){nodes{number body state labels(first:50){nodes{name} pageInfo{hasNextPage}} subIssues(first:1){totalCount} blockedBy(first:100){nodes{number state} pageInfo{hasNextPage}}} pageInfo{hasNextPage endCursor}}}}}",
+        '{hasNextPage: .data.repository.issue.subIssues.pageInfo.hasNextPage, endCursor: .data.repository.issue.subIssues.pageInfo.endCursor, items: [.data.repository.issue.subIssues.nodes[] | {id: .number, body, state, labels: [.labels.nodes[].name], subIssueCount: .subIssues.totalCount, blockedBy: [.blockedBy.nodes[] | select(.state == "OPEN") | .number], labelsTruncated: .labels.pageInfo.hasNextPage, blockersTruncated: .blockedBy.pageInfo.hasNextPage}]}',
+        autopilotTaskSchema,
+        ["-F", `number=${feature.id}`],
+      );
+      feature.tasksTruncated = false;
+    }
+  } catch (error) {
+    console.warn(`  ! could not inspect autopilot Features: ${error}`);
+    return;
+  }
+
+  if (
+    features.some(
+      (feature) => feature.labelsTruncated || feature.tasksTruncated,
+    )
+  ) {
+    console.warn(
+      "  ! Autopilot Feature data was truncated; refusing automatic authorization.",
+    );
+    return;
+  }
+
+  for (const authorization of selectAutopilotAuthorizations(features)) {
+    const task = features
+      .flatMap((feature) => feature.tasks)
+      .find((candidate) => String(candidate.id) === authorization.id);
+    if (authorization.label === "agent:implement" && task) {
+      try {
+        resolveTaskEnvironment(task.body);
+      } catch (error) {
+        const reason = `Sandcastle refused Task #${authorization.id} before claim: ${describeError(error)}`;
+        gh("issue", "comment", authorization.id, "--body", reason);
+        setPipelineLabel(authorization.id, "agent:blocked");
+        continue;
+      }
+    }
+    if (authorization.reason) {
+      gh("issue", "comment", authorization.id, "--body", authorization.reason);
+    }
+    if (setPipelineLabel(authorization.id, authorization.label)) {
+      console.log(
+        `  Authorized autopilot issue #${authorization.id} as ${authorization.label}.`,
+      );
+    }
+  }
+}
+
 const claimSchema = z.object({
   state: z.literal("OPEN"),
   title: z.string().min(1),
+  body: z.string(),
   labels: z.array(z.string()),
   parent: z.number().int().positive().nullable(),
+  parentTitle: z.string().nullable(),
   subIssueCount: z.number().int().nonnegative(),
   blockedBy: z.array(z.number().int().positive()),
   labelsTruncated: z.boolean(),
@@ -557,14 +901,14 @@ const recoveryIssueSchema = z.object({
   labels: z.array(z.string()),
 });
 
-function claimIssue(planned: PlannedIssue): boolean {
+function claimIssue(planned: PlannedIssue): ClaimedIssue | undefined {
   let issue: z.infer<typeof claimSchema>;
   try {
     const raw = capture("gh", [
       "api",
       "graphql",
       "-f",
-      "query=query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){issue(number:$number){state title labels(first:50){nodes{name} pageInfo{hasNextPage}} parent{number} subIssues(first:1){totalCount} blockedBy(first:100){nodes{number state} pageInfo{hasNextPage}}}}}",
+      "query=query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){issue(number:$number){state title body labels(first:50){nodes{name} pageInfo{hasNextPage}} parent{number title} subIssues(first:1){totalCount} blockedBy(first:100){nodes{number state} pageInfo{hasNextPage}}}}}",
       "-F",
       "owner=:owner",
       "-F",
@@ -572,14 +916,14 @@ function claimIssue(planned: PlannedIssue): boolean {
       "-F",
       `number=${planned.id}`,
       "--jq",
-      '{state: .data.repository.issue.state, title: .data.repository.issue.title, labels: [.data.repository.issue.labels.nodes[].name], parent: (.data.repository.issue.parent.number // null), subIssueCount: .data.repository.issue.subIssues.totalCount, blockedBy: [.data.repository.issue.blockedBy.nodes[] | select(.state == "OPEN") | .number], labelsTruncated: .data.repository.issue.labels.pageInfo.hasNextPage, blockersTruncated: .data.repository.issue.blockedBy.pageInfo.hasNextPage}',
+      '{state: .data.repository.issue.state, title: .data.repository.issue.title, body: .data.repository.issue.body, labels: [.data.repository.issue.labels.nodes[].name], parent: (.data.repository.issue.parent.number // null), parentTitle: (.data.repository.issue.parent.title // null), subIssueCount: .data.repository.issue.subIssues.totalCount, blockedBy: [.data.repository.issue.blockedBy.nodes[] | select(.state == "OPEN") | .number], labelsTruncated: .data.repository.issue.labels.pageInfo.hasNextPage, blockersTruncated: .data.repository.issue.blockedBy.pageInfo.hasNextPage}',
     ]);
     issue = claimSchema.parse(JSON.parse(raw));
   } catch (error) {
     console.warn(
       `  ! could not validate claim for #${planned.id}: ${describeError(error)}`,
     );
-    return false;
+    return undefined;
   }
 
   const required = ["ready-for-agent", "agent:implement"];
@@ -603,47 +947,66 @@ function claimIssue(planned: PlannedIssue): boolean {
     console.warn(
       `  ! #${planned.id} is no longer authorised or does not match the plan`,
     );
-    return false;
+    return undefined;
   }
 
-  const expectedBranch = `sandcastle/issue-${issue.parent ?? planned.id}`;
+  if (
+    hasExternalPreRunGates(issue.body) &&
+    !issue.labels.includes(GATES_CLEARED_LABEL)
+  ) {
+    const reason = `Sandcastle refused Task #${planned.id}: external pre-run gates are not cleared. Apply ${GATES_CLEARED_LABEL} after the declared resources and credentials are ready.`;
+    console.warn(`  ! ${reason}`);
+    gh("issue", "comment", planned.id, "--body", reason);
+    setPipelineLabel(planned.id, "agent:blocked");
+    runHadBlockedWork = true;
+    return undefined;
+  }
+
+  let taskEnvironment: Record<string, string>;
+  try {
+    taskEnvironment = resolveTaskEnvironment(issue.body);
+  } catch (error) {
+    const reason = `Sandcastle refused Task #${planned.id}: ${describeError(error)}`;
+    console.warn(`  ! ${reason}`);
+    gh("issue", "comment", planned.id, "--body", reason);
+    setPipelineLabel(planned.id, "agent:blocked");
+    runHadBlockedWork = true;
+    return undefined;
+  }
+
+  const expectedBranch = `sandcastle/task-${planned.id}`;
   if (planned.branch !== expectedBranch) {
     console.warn(
       `  ! #${planned.id} planned branch ${planned.branch} does not match ${expectedBranch}`,
     );
-    return false;
+    return undefined;
   }
 
-  return setPipelineLabel(planned.id, "agent:in-progress");
+  if (!setPipelineLabel(planned.id, "agent:in-progress")) return undefined;
+  return {
+    ...planned,
+    parent: issue.parent,
+    parentTitle: issue.parentTitle,
+    integrationBranch:
+      issue.parent === null
+        ? planned.branch
+        : `sandcastle/feature-${issue.parent}`,
+    taskEnvironment,
+  };
 }
 
 function promoteUnblockedQueuedIssues(): void {
-  let queued: z.infer<typeof queuedIssuesSchema>;
+  let queued: z.infer<typeof queuedIssueSchema>[];
   try {
-    const raw = capture("gh", [
-      "api",
-      "graphql",
-      "-f",
-      'query=query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo){issues(states:OPEN,first:100,labels:["ready-for-agent","agent:queued"]){nodes{number labels(first:50){nodes{name} pageInfo{hasNextPage}} blockedBy(first:100){nodes{number state} pageInfo{hasNextPage}}} pageInfo{hasNextPage}}}}',
-      "-F",
-      "owner=:owner",
-      "-F",
-      "repo=:repo",
-      "--jq",
-      '{hasNextPage: .data.repository.issues.pageInfo.hasNextPage, issues: [.data.repository.issues.nodes[] | {id: .number, labels: [.labels.nodes[].name], blockedBy: [.blockedBy.nodes[] | select(.state == "OPEN") | .number], labelsTruncated: .labels.pageInfo.hasNextPage, blockersTruncated: .blockedBy.pageInfo.hasNextPage}]}',
-    ]);
-    queued = queuedIssuesSchema.parse(JSON.parse(raw));
+    queued = readPaginatedConnection(
+      'query($owner:String!,$repo:String!,$endCursor:String){repository(owner:$owner,name:$repo){issues(states:OPEN,first:100,after:$endCursor,labels:["ready-for-agent","agent:queued"]){nodes{number body labels(first:50){nodes{name} pageInfo{hasNextPage}} blockedBy(first:100){nodes{number state} pageInfo{hasNextPage}}} pageInfo{hasNextPage endCursor}}}}',
+      '{hasNextPage: .data.repository.issues.pageInfo.hasNextPage, endCursor: .data.repository.issues.pageInfo.endCursor, items: [.data.repository.issues.nodes[] | {id: .number, body, labels: [.labels.nodes[].name], blockedBy: [.blockedBy.nodes[] | select(.state == "OPEN") | .number], labelsTruncated: .labels.pageInfo.hasNextPage, blockersTruncated: .blockedBy.pageInfo.hasNextPage}]}',
+      queuedIssueSchema,
+    );
   } catch (error) {
     console.warn(`  ! could not inspect queued issues: ${error}`);
     return;
   }
-  if (queued.hasNextPage) {
-    console.warn(
-      "  ! More than 100 queued issues exist; refusing promotion until the query is paginated.",
-    );
-    return;
-  }
-
   const refused = [
     "roadmap",
     "needs-info",
@@ -653,7 +1016,7 @@ function promoteUnblockedQueuedIssues(): void {
     "agent:in-progress",
     "agent:blocked",
   ];
-  for (const issue of queued.issues) {
+  for (const issue of queued) {
     const isQueued =
       issue.labels.includes("ready-for-agent") &&
       issue.labels.includes("agent:queued");
@@ -667,6 +1030,20 @@ function promoteUnblockedQueuedIssues(): void {
     ) {
       continue;
     }
+    if (
+      hasExternalPreRunGates(issue.body) &&
+      !issue.labels.includes(GATES_CLEARED_LABEL)
+    ) {
+      continue;
+    }
+    try {
+      resolveTaskEnvironment(issue.body);
+    } catch (error) {
+      console.warn(
+        `  ! queued Task #${issue.id} environment is not ready: ${describeError(error)}`,
+      );
+      continue;
+    }
 
     if (setPipelineLabel(String(issue.id), "agent:implement")) {
       console.log(`  Promoted queued issue #${issue.id} for implementation.`);
@@ -674,9 +1051,8 @@ function promoteUnblockedQueuedIssues(): void {
   }
 }
 
-// Whether the branch is genuinely contained in the current branch. This is the
-// fact that makes closing an issue trustworthy: the merge agent reports what it
-// believes it merged, and this checks the repository instead.
+// Whether one pinned commit is genuinely contained in another local ref.
+// Publication verification adds the remote fact required before Task closure.
 function branchLanded(branch: string, target = "HEAD"): boolean {
   try {
     capture("git", ["merge-base", "--is-ancestor", branch, target]);
@@ -684,6 +1060,164 @@ function branchLanded(branch: string, target = "HEAD"): boolean {
   } catch {
     return false;
   }
+}
+
+function localBranchHead(branch: string): string | undefined {
+  try {
+    return capture("git", ["rev-parse", "--verify", `${branch}^{commit}`]);
+  } catch {
+    return undefined;
+  }
+}
+
+function prepareIntegrationBase(
+  issue: ClaimedIssue,
+  targetHead: string,
+): string {
+  if (issue.parent === null) return targetHead;
+  const existing = localBranchHead(issue.integrationBranch);
+  if (!existing) {
+    capture("git", ["branch", issue.integrationBranch, targetHead]);
+    return targetHead;
+  }
+  if (!branchLanded(targetHead, existing)) {
+    throw new Error(
+      `${issue.integrationBranch} does not descend from the pinned target ${targetHead}.`,
+    );
+  }
+  return existing;
+}
+
+function updateIntegrationBranch(
+  branch: string,
+  expectedHead: string,
+  nextHead: string,
+): void {
+  capture("git", [
+    "update-ref",
+    `refs/heads/${branch}`,
+    nextHead,
+    expectedHead,
+  ]);
+}
+
+function publishIntegrationBranch(
+  issue: ClaimedIssue,
+  sourceHead: string,
+  targetBranch: string,
+  expectedRemoteTree: string,
+  ready: boolean,
+): PublicationReceipt {
+  const title =
+    issue.parent === null
+      ? issue.title.replace(/^\[[^\]]+\]\s*/, "")
+      : (issue.parentTitle ?? `Feature #${issue.parent}`);
+  const body =
+    issue.parent === null
+      ? `Sandcastle implementation for #${issue.id}.`
+      : `Sandcastle Feature branch for #${issue.parent}.\n\nCloses #${issue.parent}`;
+  const raw = captureWithTimeout(
+    "bash",
+    [
+      "scripts/publish-via-github-api.sh",
+      ready ? "--pr" : "--draft-pr",
+      "--source",
+      sourceHead,
+      "--branch",
+      issue.integrationBranch,
+      "--base",
+      targetBranch,
+      "--title",
+      title,
+      "--body",
+      body,
+      "--expect-remote-tree",
+      expectedRemoteTree,
+      "--json",
+    ],
+    PUBLICATION_TIMEOUT_MS,
+  );
+  return publicationReceiptSchema.parse(JSON.parse(raw));
+}
+
+function remoteBranchCommit(branch: string): string {
+  const refs = z
+    .array(
+      z.object({
+        ref: z.string(),
+        object: z.object({ sha: z.string().min(1) }),
+      }),
+    )
+    .parse(
+      JSON.parse(
+        capture("gh", [
+          "api",
+          `repos/{owner}/{repo}/git/matching-refs/heads/${encodeURIComponent(branch)}`,
+        ]),
+      ),
+    );
+  const exact = refs.find((candidate) => candidate.ref === `refs/heads/${branch}`);
+  if (!exact) throw new Error(`Remote branch ${branch} does not exist.`);
+  return exact.object.sha;
+}
+
+function verifyPublicationReceipt(receipt: PublicationReceipt): boolean {
+  try {
+    const remoteCommit = remoteBranchCommit(receipt.branch);
+    const remoteTree = capture("gh", [
+      "api",
+      `repos/{owner}/{repo}/git/commits/${remoteCommit}`,
+      "--jq",
+      ".tree.sha",
+    ]);
+    const pull = JSON.parse(
+      capture("gh", [
+        "pr",
+        "view",
+        String(receipt.prNumber),
+        "--json",
+        "headRefName,baseRefName,url",
+      ]),
+    ) as { headRefName?: string; baseRefName?: string; url?: string };
+    return (
+      remoteCommit === receipt.remoteCommit &&
+      remoteTree === receipt.tree &&
+      pull.headRefName === receipt.branch &&
+      pull.baseRefName === receipt.base &&
+      pull.url === receipt.prUrl
+    );
+  } catch {
+    return false;
+  }
+}
+
+function featureHasRemainingAgentTasks(
+  parent: number,
+  completing: Set<string>,
+): boolean {
+  const taskSchema = z.object({
+    id: z.number().int().positive(),
+    state: z.enum(["OPEN", "CLOSED"]),
+    labels: z.array(z.string()),
+    labelsTruncated: z.boolean(),
+  });
+  const tasks = readPaginatedConnection(
+    "query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$repo){issue(number:$number){subIssues(first:100,after:$endCursor){nodes{number state labels(first:50){nodes{name} pageInfo{hasNextPage}}} pageInfo{hasNextPage endCursor}}}}}",
+    '{hasNextPage: .data.repository.issue.subIssues.pageInfo.hasNextPage, endCursor: .data.repository.issue.subIssues.pageInfo.endCursor, items: [.data.repository.issue.subIssues.nodes[] | {id: .number, state, labels: [.labels.nodes[].name], labelsTruncated: .labels.pageInfo.hasNextPage}]}',
+    taskSchema,
+    ["-F", `number=${parent}`],
+  );
+  if (tasks.some((task) => task.labelsTruncated)) {
+    throw new Error(
+      `Could not determine whether Feature #${parent} has remaining agent Tasks.`,
+    );
+  }
+  return tasks.some(
+    (task) =>
+      task.state === "OPEN" &&
+      !completing.has(String(task.id)) &&
+      task.labels.includes("ready-for-agent"),
+  );
 }
 
 const activeClaims = new Map<string, ActiveClaim>();
@@ -749,18 +1283,23 @@ function blockIssue(issue: PlannedIssue, reason: string): void {
 }
 
 function closeLandedIssue(
-  issue: PlannedIssue,
-  targetBranch: string,
+  issue: ActiveClaim,
   approvedSha: string,
+  receipt: PublicationReceipt,
 ): boolean {
-  if (!branchLanded(approvedSha, targetBranch)) return false;
+  if (
+    !branchLanded(approvedSha, issue.integrationBranch) ||
+    !verifyPublicationReceipt(receipt)
+  ) {
+    return false;
+  }
 
   const closed = gh(
     "issue",
     "close",
     issue.id,
     "--comment",
-    `Completed by Sandcastle on \`${issue.branch}\`, merged into \`${targetBranch}\`.`,
+    `Completed by Sandcastle. The reviewed Task commit is published on \`${receipt.branch}\` in ${receipt.prUrl}. Verified tree: \`${receipt.tree}\`.`,
   );
   if (!closed) {
     blockIssue(
@@ -822,24 +1361,23 @@ function recoverInterruptedRun(): void {
     }
 
     if (current.state === "CLOSED") {
+      if (!issue.publication || !verifyPublicationReceipt(issue.publication)) {
+        console.error(
+          `  ! Closed Task #${issue.id} has no valid publication receipt.`,
+        );
+        unresolved.push(issue);
+        continue;
+      }
       if (!setPipelineLabel(issue.id, null)) unresolved.push(issue);
       continue;
     }
     if (!current.labels.includes("agent:in-progress")) continue;
 
-    if (branchLanded(issue.approvedSha ?? issue.branch, state.targetBranch)) {
-      const closed = gh(
-        "issue",
-        "close",
-        issue.id,
-        "--comment",
-        `Recovered after an interrupted Sandcastle run: \`${issue.branch}\` is already merged into \`${state.targetBranch}\`.`,
-      );
-      if (!closed) {
-        unresolved.push(issue);
-        continue;
-      }
-      if (!setPipelineLabel(issue.id, null)) unresolved.push(issue);
+    if (
+      issue.approvedSha &&
+      issue.publication &&
+      closeLandedIssue(issue, issue.approvedSha, issue.publication)
+    ) {
       continue;
     }
 
@@ -883,15 +1421,34 @@ function assertTargetStable(targetBranch: string, expectedHead: string): void {
   }
 }
 
+function assertRemoteBaseMatches(targetBranch: string, targetHead: string): void {
+  const remoteCommit = remoteBranchCommit(targetBranch);
+  const remoteTree = capture("gh", [
+    "api",
+    `repos/{owner}/{repo}/git/commits/${remoteCommit}`,
+    "--jq",
+    ".tree.sha",
+  ]);
+  const localTree = capture("git", ["rev-parse", `${targetHead}^{tree}`]);
+  if (remoteTree !== localTree) {
+    throw new Error(
+      `Remote PR base ${targetBranch} does not match local ${targetHead}. Publish the base branch before an AFK run.`,
+    );
+  }
+}
+
 async function runIssuePipeline(
-  issue: PlannedIssue,
-  expectedTargetHead: string,
+  issue: ClaimedIssue,
+  baseHead: string,
 ): Promise<{ commits: { sha: string }[]; reason: string }> {
   const issueContext = readIssuePromptContext(issue);
   const sandbox = await sandcastle.createSandbox({
     branch: issue.branch,
-    baseBranch: expectedTargetHead,
-    sandbox: docker({ imageName: DOCKER_IMAGE, env: { GH_TOKEN: "" } }),
+    baseBranch: baseHead,
+    sandbox: docker({
+      imageName: DOCKER_IMAGE,
+      env: { ...issue.taskEnvironment, GH_TOKEN: "" },
+    }),
     hooks,
     copyToWorktree,
     timeouts: lifecycleTimeouts,
@@ -911,11 +1468,11 @@ async function runIssuePipeline(
       );
     }
     const alignment = await sandbox.exec(
-      `git merge --ff-only ${expectedTargetHead}`,
+      `git merge --ff-only ${baseHead}`,
     );
     if (alignment.exitCode !== 0) {
       throw new Error(
-        `The issue branch has diverged from target commit ${expectedTargetHead}.`,
+        `The Task branch has diverged from its integration base ${baseHead}.`,
       );
     }
 
@@ -938,7 +1495,7 @@ async function runIssuePipeline(
     });
 
     const ahead = await sandbox.exec(
-      `git rev-list --count ${expectedTargetHead}..HEAD`,
+      `git rev-list --count ${baseHead}..HEAD`,
     );
     const aheadCount = Number(ahead.stdout.trim());
     if (
@@ -1181,25 +1738,34 @@ async function main(): Promise<void> {
   recoverInterruptedRun();
   shutdownController.signal.throwIfAborted();
 
-  // Read once before planning. The branch name remains fixed, while the
-  // expected head advances after each successful merge round.
+  // The checked-out branch is the immutable PR base for this run. Feature
+  // branches are published to it, but the local base itself never moves.
   const targetBranch = capture("git", ["branch", "--show-current"]);
-  let expectedTargetHead = capture("git", ["rev-parse", "HEAD"]);
+  const expectedTargetHead = capture("git", ["rev-parse", "HEAD"]);
+  assertRemoteBaseMatches(targetBranch, expectedTargetHead);
   runStateTargetBranch = targetBranch;
   runStateTargetHead = expectedTargetHead;
+  let claimedTaskCount = 0;
 
-  for (let round = 1; round <= MAX_ROUNDS; round++) {
+  for (let round = 1; claimedTaskCount < TASK_BUDGET; round++) {
     shutdownController.signal.throwIfAborted();
     wholeRunSignal.throwIfAborted();
-    console.log(`\n=== Round ${round}/${MAX_ROUNDS} ===\n`);
+    console.log(
+      `\n=== Round ${round}; ${claimedTaskCount}/${TASK_BUDGET} Task budget used ===\n`,
+    );
     assertTargetStable(targetBranch, expectedTargetHead);
+    authorizeAutopilotTasks();
     promoteUnblockedQueuedIssues();
 
     // Phase 1: plan only from the explicitly authorised tracker view. A named
     // throwaway branch prevents a read-only planner mistake from touching the
     // host checkout.
-    const plannerBranch = temporaryBranch("planner", round);
     const authorizedIssues = readAuthorizedIssues();
+    if (authorizedIssues === "[]") {
+      console.log("No authorised issues to work on. Exiting.");
+      break;
+    }
+    const plannerBranch = temporaryBranch("planner", round);
     const plan = await (async () => {
       try {
         const result = await sandcastle.run({
@@ -1221,7 +1787,12 @@ async function main(): Promise<void> {
           agent: sandcastle.cursor(agentModels.planner),
           promptFile: "./.sandcastle/plan-prompt.md",
           promptArgs: {
-            MAX_PARALLEL_ISSUES: String(MAX_PARALLEL_ISSUES),
+            MAX_PARALLEL_ISSUES: String(
+              Math.min(
+                MAX_PARALLEL_ISSUES,
+                TASK_BUDGET - claimedTaskCount,
+              ),
+            ),
             AUTHORIZED_ISSUES: authorizedIssues,
           },
           output: sandcastle.Output.object({ tag: "plan", schema: planSchema }),
@@ -1237,7 +1808,10 @@ async function main(): Promise<void> {
       }
     })();
 
-    const plannedIssues = plan.output.issues;
+    const plannedIssues = plan.output.issues.slice(
+      0,
+      TASK_BUDGET - claimedTaskCount,
+    );
     if (plannedIssues.length === 0) {
       console.log("No unblocked issues to work on. Exiting.");
       break;
@@ -1250,23 +1824,44 @@ async function main(): Promise<void> {
       console.log(`  ${issue.id}: ${issue.title} → ${issue.branch}`);
     }
 
-    const issues = plannedIssues.filter((issue) => {
-      const claimed = claimIssue(issue);
-      if (claimed) {
-        activeClaims.set(issue.id, issue);
-        persistRunState();
-      }
-      return claimed;
-    });
+    const issues = plannedIssues
+      .map((issue) => {
+        const claimed = claimIssue(issue);
+        if (claimed) {
+          const { taskEnvironment: _taskEnvironment, ...persistable } = claimed;
+          activeClaims.set(issue.id, persistable);
+          persistRunState();
+        }
+        return claimed;
+      })
+      .filter((issue): issue is ClaimedIssue => issue !== undefined);
+    claimedTaskCount += issues.length;
 
     if (issues.length === 0) {
       console.warn("No selected issue could be claimed. Stopping.");
       break;
     }
 
-    // Phase 2: independent pipelines fail independently.
+    const integrationBases = new Map<string, string>();
+    for (const issue of issues) {
+      const base = prepareIntegrationBase(issue, expectedTargetHead);
+      const existing = integrationBases.get(issue.integrationBranch);
+      if (existing && existing !== base) {
+        throw new Error(
+          `Feature base changed while claiming ${issue.integrationBranch}.`,
+        );
+      }
+      integrationBases.set(issue.integrationBranch, base);
+    }
+
+    // Phase 2: independent Task pipelines fail independently.
     const settled = await Promise.allSettled(
-      issues.map((issue) => runIssuePipeline(issue, expectedTargetHead)),
+      issues.map((issue) =>
+        runIssuePipeline(
+          issue,
+          integrationBases.get(issue.integrationBranch)!,
+        ),
+      ),
     );
 
     for (const [index, outcome] of settled.entries()) {
@@ -1318,80 +1913,94 @@ async function main(): Promise<void> {
       if (!/^[0-9a-f]{40}$/.test(sha)) {
         throw new Error(`Could not pin the reviewed commit for #${issue.id}.`);
       }
-      activeClaims.set(issue.id, { ...issue, approvedSha: sha });
+      const { taskEnvironment: _taskEnvironment, ...persistable } = issue;
+      activeClaims.set(issue.id, { ...persistable, approvedSha: sha });
       return { issue, sha };
     });
     persistRunState();
 
-    // Phase 3: build and verify a temporary integration branch. The host
-    // target moves only through a final, race-checked fast-forward.
-    let integration: { branch: string; head: string } | undefined;
-    try {
-      assertTargetStable(targetBranch, expectedTargetHead);
-      integration = await buildIntegrationBranch(
-        approvedIssues,
-        expectedTargetHead,
-        round,
-      );
-      assertTargetStable(targetBranch, expectedTargetHead);
+    const groups = new Map<string, ApprovedIssue[]>();
+    for (const approved of approvedIssues) {
+      const group = groups.get(approved.issue.integrationBranch) ?? [];
+      group.push(approved);
+      groups.set(approved.issue.integrationBranch, group);
+    }
 
-      const recordedIntegrationHead = capture("git", [
-        "rev-parse",
-        "--verify",
-        `${integration.branch}^{commit}`,
-      ]);
-      if (recordedIntegrationHead !== integration.head) {
-        throw new Error(
-          "The integration branch moved after verification. Refusing to update the target.",
-        );
-      }
-
-      capture("git", ["merge", "--ff-only", integration.head]);
-      expectedTargetHead = capture("git", ["rev-parse", "HEAD"]);
-      if (expectedTargetHead !== integration.head) {
-        throw new Error(
-          "The target did not advance to the verified integration.",
-        );
-      }
-      runStateTargetHead = expectedTargetHead;
-      persistRunState();
-    } catch (error) {
-      const reason = `The merge phase failed: ${describeError(error)}. The issue branch is preserved for retry.`;
-      console.error(reason);
-      for (const { issue, sha } of approvedIssues) {
-        if (!closeLandedIssue(issue, targetBranch, sha)) {
-          blockIssue(issue, reason);
+    // Phase 3: integrate and publish each Feature independently. Publication
+    // is a hard gate for Task closure.
+    for (const [integrationBranch, group] of groups) {
+      group.sort((left, right) => Number(left.issue.id) - Number(right.issue.id));
+      const baseHead = integrationBases.get(integrationBranch)!;
+      let integration: { branch: string; head: string } | undefined;
+      try {
+        assertTargetStable(targetBranch, expectedTargetHead);
+        let publishedHead: string;
+        if (
+          group.length === 1 &&
+          group[0]!.issue.parent === null
+        ) {
+          publishedHead = group[0]!.sha;
+        } else {
+          integration = await buildIntegrationBranch(group, baseHead, round);
+          updateIntegrationBranch(
+            integrationBranch,
+            baseHead,
+            integration.head,
+          );
+          publishedHead = integration.head;
         }
-      }
-
-      const currentBranch = capture("git", ["branch", "--show-current"]);
-      const dirty = capture("git", ["status", "--porcelain"]);
-      if (currentBranch !== targetBranch || dirty) {
-        throw new Error(
-          "Stopping because the target checkout changed during the failed merge.",
+        const expectedRemoteTree = capture("git", [
+          "rev-parse",
+          `${baseHead}^{tree}`,
+        ]);
+        const parent = group[0]!.issue.parent;
+        const ready =
+          parent === null ||
+          !featureHasRemainingAgentTasks(
+            parent,
+            new Set(group.map(({ issue }) => issue.id)),
+          );
+        const receipt = publishIntegrationBranch(
+          group[0]!.issue,
+          publishedHead,
+          targetBranch,
+          expectedRemoteTree,
+          ready,
         );
-      }
-      expectedTargetHead = capture("git", ["rev-parse", "HEAD"]);
-      runStateTargetHead = expectedTargetHead;
-      persistRunState();
-      if (integration) {
-        deleteBranchIfMerged(integration.branch, targetBranch);
-      }
-      continue;
-    }
 
-    // Tracker completion follows repository fact, not the merge agent's claim.
-    for (const { issue, sha } of approvedIssues) {
-      if (!closeLandedIssue(issue, targetBranch, sha)) {
-        blockIssue(
-          issue,
-          `The reviewed commit ${sha} did not land in \`${targetBranch}\`. Its branch is preserved for retry.`,
+        for (const { issue, sha } of group) {
+          const active = activeClaims.get(issue.id);
+          if (active) {
+            activeClaims.set(issue.id, {
+              ...active,
+              approvedSha: sha,
+              publication: receipt,
+            });
+          }
+        }
+        persistRunState();
+
+        for (const { issue, sha } of group) {
+          const active = activeClaims.get(issue.id);
+          if (!active || !closeLandedIssue(active, sha, receipt)) {
+            blockIssue(
+              issue,
+              `The reviewed commit ${sha} was not proven on the published Feature branch.`,
+            );
+          }
+        }
+        if (integration) {
+          deleteBranchIfMerged(integration.branch, integrationBranch);
+        }
+        console.log(
+          `Published ${integrationBranch} in ${receipt.prUrl}; closed ${group.length} Task(s).`,
         );
+      } catch (error) {
+        const reason = `Feature integration or publication failed: ${describeError(error)}. Reviewed Task branches were preserved.`;
+        console.error(reason);
+        for (const { issue } of group) blockIssue(issue, reason);
       }
     }
-    deleteBranchIfMerged(integration.branch, targetBranch);
-
-    console.log("\nBranches merged.");
   }
 
   console.log("\nAll done.");
