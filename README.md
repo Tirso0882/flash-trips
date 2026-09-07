@@ -49,14 +49,34 @@ travel-provider, and Azure calls are outside this scaffold.
 Applying `agent:autopilot` to a parent Feature authorizes Sandcastle to process
 its dependency-ready Tasks. It runs up to three independent Tasks at once on
 Task-local branches, integrates them into one Feature branch, and opens or
-updates a draft Feature pull request into the checked-out base branch. A Task
-closes only after that remote branch and pull request are verified.
+updates a draft Feature pull request into `main`. Sandcastle must run from a
+clean, remote-matched `main` checkout. A Task closes only after that remote
+branch and pull request are verified.
 
 Set `SANDCASTLE_TASK_BUDGET` and `SANDCASTLE_TIME_BUDGET_MINUTES` in
 `.sandcastle/.env` to bound one AFK run. A Task with external pre-run gates
 also needs `agent:gates-cleared`. If it declares an `## AFK environment`
 section, allowlist those variable names with `SANDCASTLE_TASK_ENV_ALLOWLIST`.
 Sandcastle passes only those configured values to that Task sandbox.
-The checked-out base must be clean and its Git tree must already match the
-remote branch. Publish `dev` before starting Sandcastle when local base changes
-have not reached its existing pull request.
+
+When a Feature has no remaining agent Tasks, Sandcastle marks its pull request
+ready and enables squash auto-merge. GitHub merges only after the required
+`quality`, `containers`, and `traceability` checks pass.
+
+## Production deployment
+
+Production runs on Azure Container Apps in West Europe. GitHub Actions builds
+the API and web images once after `main` CI succeeds, publishes immutable image
+digests to Azure Container Registry, and pauses at the protected `production`
+environment before deploying those exact digests.
+
+After the deployment files have reached `main`, run the repeatable setup wizard:
+
+```sh
+scripts/setup-azure-production.sh
+```
+
+The wizard previews the Bicep deployment, provisions the Azure app baseline,
+configures secretless GitHub OIDC identities and the production approval gate,
+then walks through the first release. It does not create PostgreSQL or modify
+the existing Azure AI Services and External ID resources.

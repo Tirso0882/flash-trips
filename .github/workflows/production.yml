@@ -1,0 +1,144 @@
+name: Production
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit SHA or main to release
+        required: true
+        default: main
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    if: >-
+      vars.AZURE_RELEASE_CLIENT_ID != '' &&
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      api-image: ${{ steps.images.outputs.api-image }}
+      release-sha: ${{ steps.source.outputs.release-sha }}
+      web-image: ${{ steps.images.outputs.web-image }}
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          ref: >-
+            ${{ github.event_name == 'workflow_run' &&
+                github.event.workflow_run.head_sha ||
+                inputs.ref }}
+
+      - name: Verify source belongs to main
+        id: source
+        run: |
+          git fetch origin main
+          release_sha="$(git rev-parse HEAD)"
+          git merge-base --is-ancestor "$release_sha" origin/main
+          printf 'release-sha=%s\n' "$release_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Sign in to Azure for image publication
+        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac
+        with:
+          client-id: ${{ vars.AZURE_RELEASE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and publish immutable images
+        id: images
+        env:
+          ACR_NAME: ${{ vars.AZURE_ACR_NAME }}
+          RELEASE_SHA: ${{ steps.source.outputs.release-sha }}
+        run: |
+          login_server="$(az acr show --name "$ACR_NAME" --query loginServer --output tsv)"
+          az acr login --name "$ACR_NAME"
+
+          api_tag="$login_server/flash-trips-api:$RELEASE_SHA"
+          web_tag="$login_server/flash-trips-web:$RELEASE_SHA"
+          docker build --file apps/api/Dockerfile --tag "$api_tag" .
+          docker build --file apps/web/Dockerfile --tag "$web_tag" .
+          docker push "$api_tag"
+          docker push "$web_tag"
+
+          api_digest="$(az acr manifest show-metadata \
+            --registry "$ACR_NAME" \
+            --name "flash-trips-api:$RELEASE_SHA" \
+            --query digest \
+            --output tsv)"
+          web_digest="$(az acr manifest show-metadata \
+            --registry "$ACR_NAME" \
+            --name "flash-trips-web:$RELEASE_SHA" \
+            --query digest \
+            --output tsv)"
+
+          test -n "$api_digest"
+          test -n "$web_digest"
+          printf 'api-image=%s/flash-trips-api@%s\n' "$login_server" "$api_digest" >> "$GITHUB_OUTPUT"
+          printf 'web-image=%s/flash-trips-web@%s\n' "$login_server" "$web_digest" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs:
+      - release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://${{ vars.AZURE_WEB_FQDN }}
+    steps:
+      - name: Sign in to Azure for production deployment
+        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac
+        with:
+          client-id: ${{ vars.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy the tested image digests
+        env:
+          API_APP_NAME: ${{ vars.AZURE_API_APP_NAME }}
+          API_FQDN: ${{ vars.AZURE_API_FQDN }}
+          API_IMAGE: ${{ needs.release.outputs.api-image }}
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WEB_APP_NAME: ${{ vars.AZURE_WEB_APP_NAME }}
+          WEB_IMAGE: ${{ needs.release.outputs.web-image }}
+        run: |
+          az containerapp update \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$API_APP_NAME" \
+            --image "$API_IMAGE" \
+            --set-env-vars LIVE_CALL_ALLOWANCE=0
+          az containerapp update \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$WEB_APP_NAME" \
+            --image "$WEB_IMAGE" \
+            --set-env-vars "FLASH_TRIPS_API_BASE_URL=https://$API_FQDN"
+
+      - name: Smoke test production through the web boundary
+        env:
+          PRODUCTION_URL: https://${{ vars.AZURE_WEB_FQDN }}
+        run: |
+          response="$(mktemp)"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error \
+              "$PRODUCTION_URL/api/status" > "$response"; then
+              test -s "$response"
+              exit 0
+            fi
+            test "$attempt" -lt 30
+            sleep 10
+          done
