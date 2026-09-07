@@ -6,8 +6,8 @@ param location string = 'westeurope'
 @description('Production resource group name.')
 param resourceGroupName string = 'flash-trips-prod-rg'
 
-@description('GitHub repository in owner/name form.')
-param githubRepository string
+@description('GitHub OIDC subject prefix reported by the repository settings API.')
+param githubSubjectPrefix string
 
 @description('GitHub Environment that protects production deployment.')
 param githubEnvironment string = 'production'
@@ -27,7 +27,7 @@ module production 'main.bicep' = {
   scope: productionResourceGroup
   params: {
     githubEnvironment: githubEnvironment
-    githubRepository: githubRepository
+    githubSubjectPrefix: githubSubjectPrefix
     location: location
   }
 }

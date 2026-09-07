@@ -10,4 +10,5 @@ tests
 .secrets/
 !.env.example
 *.log
+.cursor
 docs/personal-docs/
