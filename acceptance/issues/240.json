@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "issue": 240,
+  "title": "Establish the persistence foundation and the Planner record",
+  "outcome": "Added principal-scoped Planner persistence with reversible migrations and real PostgreSQL transaction checks.",
+  "checks": [
+    {
+      "name": "Planner persistence and migration contract",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/persistence/test_planner_persistence.py"
+      ]
+    }
+  ]
+}

@@ -681,10 +681,11 @@
             <article class="panel">
               <h3>Defined but not connected</h3>
               <p>
-                The PostgreSQL transaction adapter and migration foundation,
-                secure session policy constants, JSON logger, Key Vault access,
-                and Application Insights resources exist but do not participate
-                in a current request flow.
+                The PostgreSQL adapter implements the principal-scoped Planner
+                repository and unit of work behind a reversible Alembic
+                migration, but it does not yet participate in a request flow.
+                Secure session policy constants, JSON logger, Key Vault access,
+                and Application Insights resources are also not connected.
               </p>
             </article>
             <article class="panel">
