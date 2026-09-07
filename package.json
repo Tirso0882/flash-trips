@@ -5,6 +5,8 @@
     "contracts": "uv run python scripts/generate_openapi.py && openapi-ts -i contracts/openapi/openapi.json -o contracts/ts/src -c @hey-api/client-fetch",
     "prototype:planner": "python3 -m http.server 4173 --directory docs/prototypes",
     "sandcastle": "pnpm exec tsx .sandcastle/main.mts",
+    "sandcastle:check": "tsc --project .sandcastle/tsconfig.json",
+    "test:sandcastle": "node --import tsx --test .sandcastle/main.test.mts",
     "traceability": "node scripts/traceability.mjs",
     "test:traceability": "node --test tests/traceability/traceability.test.mjs",
     "test:web-boundaries": "node --import ./tests/node/deny-network.mjs --test tests/web/boundaries.test.mjs"
@@ -23,11 +25,13 @@
     }
   },
   "dependencies": {
-    "@ai-hero/sandcastle": "^0.12.0",
+    "@ai-hero/sandcastle": "0.12.0",
     "zod": "^4.5.2"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "0.99.0",
+    "@standard-schema/spec": "1.1.0",
+    "@types/node": "22.20.1",
     "tsx": "4.23.13",
     "typescript": "5.9.3"
   }

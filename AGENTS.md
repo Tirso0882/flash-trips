@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues and specs are tracked in GitHub Issues for `Tirso0882/flash-trips`. See `docs/agents/issue-tracker.md`.
+Issues and specs are tracked in GitHub Issues for `Tirso0882/flash-trips`. Read `docs/agents/issue-tracker.md` before creating a ticket, decomposing a Feature into Tasks, moving an `agent:*` label, or writing anything to the tracker.
 
 ### Triage labels
 

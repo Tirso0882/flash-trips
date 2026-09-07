@@ -27,6 +27,7 @@
     ".next/types/**/*.ts",
     "app/**/*.ts",
     "app/**/*.tsx",
+    "instrumentation.ts",
     "lib/**/*.ts",
     "next-env.d.ts",
     "next.config.ts",

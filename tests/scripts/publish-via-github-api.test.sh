@@ -15,7 +15,7 @@ fail() {
 assert_contains() {
   local file="$1"
   local expected="$2"
-  rg -F --quiet "$expected" "$file" || fail "expected '$expected' in $file"
+  grep -qF -- "$expected" "$file" || fail "expected '$expected' in $file"
 }
 
 new_repo() {
@@ -56,7 +56,7 @@ if [[ "$1" == "repo" && "$2" == "view" ]]; then
     printf 'unknown flag: --repo\n' >&2
     exit 1
   fi
-  if printf '%s\n' "$@" | rg -q 'defaultBranchRef'; then
+  if printf '%s\n' "$@" | grep -q 'defaultBranchRef'; then
     printf 'main\n'
   else
     printf 'Tirso0882/flash-trips\n'
@@ -183,9 +183,9 @@ assert_contains "$test_root/first.out" "Verified tree:"
 [[ -f "$FAKE_GH_STATE_DIR/ref" ]] || fail "remote ref was not created"
 [[ -f "$FAKE_GH_STATE_DIR/pr-draft" ]] || fail "draft PR was not requested"
 
-blob_calls_before="$(rg -c 'git/blobs' "$FAKE_GH_STATE_DIR/calls.log")"
+blob_calls_before="$(grep -c 'git/blobs' "$FAKE_GH_STATE_DIR/calls.log" || true)"
 (cd "$publish_repo" && PUBLISH_GH_BIN="$fake_gh" "$publisher" --draft-pr --allow-dirty >"$test_root/second.out" 2>&1)
-blob_calls_after="$(rg -c 'git/blobs' "$FAKE_GH_STATE_DIR/calls.log")"
+blob_calls_after="$(grep -c 'git/blobs' "$FAKE_GH_STATE_DIR/calls.log" || true)"
 [[ "$blob_calls_before" == "$blob_calls_after" ]] || fail "idempotent rerun uploaded blobs"
 assert_contains "$test_root/second.out" "skipping Git object publication"
 assert_contains "$test_root/second.out" "Reusing existing PR #99"

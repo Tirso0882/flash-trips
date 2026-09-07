@@ -1,0 +1,1439 @@
+// Parallel Planner with Review: three-phase orchestration loop
+//
+// This template drives a multi-phase workflow:
+//   Phase 1 (Plan):             An agent analyzes explicitly authorised issues
+//                               and outputs a validated <plan> JSON payload.
+//   Phase 2 (Execute + Review): For each issue, a sandbox is created via
+//                               createSandbox(). The implementer runs first
+//                               and an independent reviewer gates its commits.
+//                               Issue pipelines run concurrently.
+//   Phase 3 (Merge):            A single agent merges all completed branches
+//                               into the current branch.
+//
+// The agents only ever produce commits. Closing issues, moving labels, and
+// commenting are done here, by this file, from the validated plan and from
+// what git says actually landed. See docs/agents/issue-tracker.md.
+//
+// The outer loop repeats up to MAX_ROUNDS times so that newly unblocked
+// issues are picked up after each round of merges.
+//
+// Usage:
+//   npx tsx .sandcastle/main.mts
+// Or add to package.json:
+//   "scripts": { "sandcastle": "npx tsx .sandcastle/main.mts" }
+
+import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+
+import * as sandcastle from "@ai-hero/sandcastle";
+import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import { z } from "zod";
+
+// ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
+
+// A round exits early when no explicitly authorised work remains. The upper
+// bound prevents a bad tracker state from running forever.
+const MAX_ROUNDS = 10;
+
+// Keep local Docker use bounded even when many unrelated tickets are queued.
+const MAX_PARALLEL_ISSUES = 3;
+
+// Match the course-video-manager AFK workflows: no individual agent may run
+// forever merely because it continues producing output. Sandcastle's idle
+// timeout remains a second, shorter guard against a hung agent.
+const phaseTimeoutMs = {
+  planner: 15 * 60 * 1_000,
+  implementer: 60 * 60 * 1_000,
+  reviewer: 60 * 60 * 1_000,
+  merger: 60 * 60 * 1_000,
+} as const;
+
+const IDLE_TIMEOUT_SECONDS = 10 * 60;
+const COMPLETION_TIMEOUT_SECONDS = 60;
+const HOOK_TIMEOUT_MS = 10 * 60 * 1_000;
+const HOST_COMMAND_TIMEOUT_MS = 2 * 60 * 1_000;
+const DOCKER_IMAGE = "sandcastle:flash-trips";
+const RUN_STATE_PATH = ".sandcastle/run-state.json";
+const WHOLE_RUN_TIMEOUT_MS = 8 * 60 * 60 * 1_000;
+
+const lifecycleTimeouts = {
+  copyToWorktreeMs: 10 * 60 * 1_000,
+  gitSetupMs: 30 * 1_000,
+  commitCollectionMs: 2 * 60 * 1_000,
+  mergeToHostMs: 2 * 60 * 1_000,
+} as const;
+
+// Planning is constrained by structured output, while implementation and
+// conflict resolution benefit from more reasoning. A different model family
+// reviews the implementation to reduce correlated mistakes.
+const agentModels = {
+  planner: "gpt-5.6-sol-medium",
+  implementer: "gpt-5.6-sol-medium",
+  reviewer: "claude-opus-5-thinking-medium",
+  merger: "gpt-5.6-sol-medium",
+} as const;
+
+// The planner emits its plan as JSON inside <plan> tags; Output.object extracts
+// and validates it against this schema. We use Zod here, but any Standard
+// Schema validator works just as well: Valibot, ArkType, etc. See
+// https://standardschema.dev.
+export const planSchema = z
+  .object({
+    issues: z
+      .array(
+        z.object({
+          id: z.string().regex(/^[1-9]\d*$/),
+          title: z.string().min(1),
+          branch: z.string().regex(/^sandcastle\/issue-[1-9]\d*$/),
+        }),
+      )
+      .max(MAX_PARALLEL_ISSUES),
+  })
+  .superRefine(({ issues }, context) => {
+    const ids = new Set<string>();
+    const branches = new Set<string>();
+
+    for (const [index, issue] of issues.entries()) {
+      if (ids.has(issue.id)) {
+        context.addIssue({
+          code: "custom",
+          message: `Duplicate issue ${issue.id}`,
+          path: ["issues", index, "id"],
+        });
+      }
+      if (branches.has(issue.branch)) {
+        context.addIssue({
+          code: "custom",
+          message: `Duplicate branch ${issue.branch}`,
+          path: ["issues", index, "branch"],
+        });
+      }
+      ids.add(issue.id);
+      branches.add(issue.branch);
+    }
+  });
+
+type PlannedIssue = z.infer<typeof planSchema>["issues"][number];
+type ActiveClaim = PlannedIssue & { approvedSha?: string };
+type ApprovedIssue = { issue: PlannedIssue; sha: string };
+
+const runStateSchema = z.object({
+  targetBranch: z.string().min(1),
+  targetHead: z.string().regex(/^[0-9a-f]{40}$/),
+  issues: z.array(
+    z.object({
+      id: z.string().regex(/^[1-9]\d*$/),
+      title: z.string().min(1),
+      branch: z.string().regex(/^sandcastle\/issue-[1-9]\d*$/),
+      approvedSha: z
+        .string()
+        .regex(/^[0-9a-f]{40}$/)
+        .optional(),
+    }),
+  ),
+});
+
+const reviewSchema = z.object({
+  verdict: z.enum(["approved", "blocked"]),
+  summary: z.string().min(1),
+});
+
+const queuedIssuesSchema = z.object({
+  hasNextPage: z.boolean(),
+  issues: z.array(
+    z.object({
+      id: z.number().int().positive(),
+      labels: z.array(z.string()),
+      blockedBy: z.array(z.number().int().positive()),
+      labelsTruncated: z.boolean(),
+      blockersTruncated: z.boolean(),
+    }),
+  ),
+});
+
+const authorizedIssuesSchema = z.object({
+  hasNextPage: z.boolean(),
+  issues: z.array(
+    z.object({
+      number: z.number().int().positive(),
+      title: z.string().min(1),
+      body: z.string(),
+      labels: z.array(z.string()),
+      parent: z.number().int().positive().nullable(),
+      parentTitle: z.string().nullable(),
+      subIssueCount: z.number().int().nonnegative(),
+      blockedBy: z.array(z.number().int().positive()),
+      labelsTruncated: z.boolean(),
+      blockersTruncated: z.boolean(),
+      comments: z.array(z.string()),
+    }),
+  ),
+});
+
+const issuePromptContextSchema = z.object({
+  number: z.number().int().positive(),
+  title: z.string().min(1),
+  body: z.string(),
+  comments: z.array(z.string()),
+  commentsTruncated: z.boolean(),
+  parent: z
+    .object({
+      number: z.number().int().positive(),
+      title: z.string().min(1),
+      body: z.string(),
+      comments: z.array(z.string()),
+      commentsTruncated: z.boolean(),
+    })
+    .nullable(),
+});
+
+export function parseReview(stdout: string): z.infer<typeof reviewSchema> {
+  const matches = [...stdout.matchAll(/<review>\s*([\s\S]*?)\s*<\/review>/g)];
+  if (matches.length !== 1 || !matches[0]?.[1]) {
+    throw new Error("Reviewer must emit exactly one non-empty <review> block");
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(matches[0][1]);
+  } catch (error) {
+    throw new Error(`Reviewer emitted invalid JSON: ${error}`);
+  }
+
+  return reviewSchema.parse(payload);
+}
+
+// Keep in sync with the `packages` list in pnpm-workspace.yaml.
+const workspacePackages = ["apps/web", "contracts/ts"];
+
+// Hooks run inside the sandbox before the agent starts each iteration.
+// `just install` restores both halves of the toolchain: uv for the Python
+// side and pnpm for the workspace. It is the safety net for platform-specific
+// binaries and anything added since the node_modules copy below.
+const hooks = {
+  sandbox: {
+    onSandboxReady: [{ command: "just install", timeoutMs: HOOK_TIMEOUT_MS }],
+  },
+};
+
+// Copy node_modules from the host into the worktree before each sandbox
+// starts, so the install above is a fast no-op instead of a cold resolve.
+// pnpm puts the real packages in the root node_modules/.pnpm store and gives
+// each workspace package its own node_modules of relative symlinks into it,
+// so every one of those directories has to come along or the links dangle.
+const copyToWorktree = [
+  "node_modules",
+  ...workspacePackages.map((dir) => `${dir}/node_modules`),
+].filter((dir) => existsSync(dir));
+
+// ---------------------------------------------------------------------------
+// Tracker writes
+//
+// docs/agents/issue-tracker.md draws the line: an agent produces commits, and
+// automation does the tracker writes from what the agent produced. The prompts
+// are commit-only for that reason, and every close, comment, and label lives
+// here instead, running over the validated plan. A misread scope then costs a
+// branch rather than a specification.
+// ---------------------------------------------------------------------------
+
+function capture(command: string, args: string[]): string {
+  return execFileSync(command, args, {
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+    timeout: HOST_COMMAND_TIMEOUT_MS,
+  }).trim();
+}
+
+function describeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/\s+/g, " ").trim().slice(0, 2_000);
+}
+
+function configured(name: string): boolean {
+  if (process.env[name]?.trim()) return true;
+  if (!existsSync(".sandcastle/.env")) return false;
+
+  const assignment = new RegExp(
+    `^\\s*(?:export\\s+)?${name}\\s*=\\s*(.+)\\s*$`,
+  );
+  return readFileSync(".sandcastle/.env", "utf8")
+    .split("\n")
+    .some((line) => {
+      const value = line.match(assignment)?.[1]?.trim();
+      return (
+        value !== undefined && value !== "" && value !== '""' && value !== "''"
+      );
+    });
+}
+
+function runPreflight(): void {
+  const branch = capture("git", ["branch", "--show-current"]);
+  if (!branch) {
+    throw new Error(
+      "Sandcastle requires a named target branch, not detached HEAD.",
+    );
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(branch)) {
+    throw new Error(
+      `Target branch ${JSON.stringify(branch)} contains unsafe shell characters.`,
+    );
+  }
+  capture("git", ["check-ref-format", "--branch", branch]);
+
+  const dirty = capture("git", ["status", "--porcelain"]);
+  if (dirty) {
+    throw new Error(
+      "The target checkout is not clean. Commit or stash all changes before an AFK run.",
+    );
+  }
+
+  capture("git", ["config", "user.name"]);
+  capture("git", ["config", "user.email"]);
+  capture("gh", ["auth", "status"]);
+  const repositoryPermission = capture("gh", [
+    "repo",
+    "view",
+    "--json",
+    "viewerPermission",
+    "--jq",
+    ".viewerPermission",
+  ]);
+  if (!["ADMIN", "MAINTAIN", "WRITE"].includes(repositoryPermission)) {
+    throw new Error(
+      `GitHub authentication has ${repositoryPermission || "unknown"} repository permission; issue writes require WRITE or better.`,
+    );
+  }
+  capture("docker", ["info", "--format", "{{.ServerVersion}}"]);
+  capture("docker", ["image", "inspect", DOCKER_IMAGE]);
+  capture("docker", [
+    "run",
+    "--rm",
+    "--entrypoint",
+    "agent",
+    DOCKER_IMAGE,
+    "--version",
+  ]);
+
+  for (const name of ["CURSOR_API_KEY"]) {
+    if (!configured(name)) {
+      throw new Error(
+        `Missing ${name}. Set it in the environment or .sandcastle/.env.`,
+      );
+    }
+  }
+
+  const labels = new Set(
+    capture("gh", [
+      "label",
+      "list",
+      "--limit",
+      "200",
+      "--json",
+      "name",
+      "--jq",
+      ".[].name",
+    ])
+      .split("\n")
+      .filter(Boolean),
+  );
+  const requiredLabels = ["ready-for-agent", ...implementationLabels];
+  const missingLabels = requiredLabels.filter((label) => !labels.has(label));
+  if (missingLabels.length > 0) {
+    throw new Error(
+      `Missing required GitHub labels: ${missingLabels.join(", ")}`,
+    );
+  }
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const code = Reflect.get(error, "code");
+  return typeof code === "string" ? code : undefined;
+}
+
+function processIsRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return errorCode(error) === "EPERM";
+  }
+}
+
+function acquireRunLock(): () => void {
+  const path = ".sandcastle/run.lock";
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const descriptor = openSync(path, "wx");
+      writeFileSync(
+        descriptor,
+        JSON.stringify({
+          pid: process.pid,
+          startedAt: new Date().toISOString(),
+        }),
+      );
+      closeSync(descriptor);
+
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        rmSync(path, { force: true });
+      };
+    } catch (error) {
+      if (errorCode(error) !== "EEXIST") throw error;
+
+      let ownerPid: number | undefined;
+      try {
+        const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+        if (
+          typeof parsed === "object" &&
+          parsed !== null &&
+          Number.isInteger(Reflect.get(parsed, "pid"))
+        ) {
+          ownerPid = Number(Reflect.get(parsed, "pid"));
+        }
+      } catch {
+        // A malformed lock cannot belong to a healthy run.
+      }
+
+      if (ownerPid !== undefined && processIsRunning(ownerPid)) {
+        throw new Error(
+          `Another Sandcastle run is active in this checkout (PID ${ownerPid}).`,
+        );
+      }
+      rmSync(path, { force: true });
+    }
+  }
+
+  throw new Error("Could not acquire the Sandcastle run lock.");
+}
+
+// A tracker write must never take the run down with it. An expired token or a
+// renamed label is worth a warning; it is not worth losing a merge.
+function gh(...args: string[]): boolean {
+  try {
+    capture("gh", args);
+    return true;
+  } catch (error) {
+    console.warn(`  ! gh ${args.join(" ")} failed: ${error}`);
+    return false;
+  }
+}
+
+function readAuthorizedIssues(): string {
+  const raw = capture("gh", [
+    "api",
+    "graphql",
+    "-f",
+    'query=query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo){issues(states:OPEN,first:100,labels:["ready-for-agent","agent:implement"]){nodes{number title body labels(first:50){nodes{name} pageInfo{hasNextPage}} parent{number title} subIssues(first:1){totalCount} blockedBy(first:100){nodes{number state} pageInfo{hasNextPage}} comments(last:5){nodes{body}}} pageInfo{hasNextPage}}}}',
+    "-F",
+    "owner=:owner",
+    "-F",
+    "repo=:repo",
+    "--jq",
+    '{hasNextPage: .data.repository.issues.pageInfo.hasNextPage, issues: [.data.repository.issues.nodes[] | {number, title, body, labels: [.labels.nodes[].name], parent: (.parent.number // null), parentTitle: (.parent.title // null), subIssueCount: .subIssues.totalCount, blockedBy: [.blockedBy.nodes[] | select(.state == "OPEN") | .number], labelsTruncated: .labels.pageInfo.hasNextPage, blockersTruncated: .blockedBy.pageInfo.hasNextPage, comments: [.comments.nodes[].body]} | select((.labels | index("ready-for-agent")) != null and (.labels | index("agent:implement")) != null)]}',
+  ]);
+  const result = authorizedIssuesSchema.parse(JSON.parse(raw));
+  if (
+    result.hasNextPage ||
+    result.issues.some(
+      (issue) => issue.labelsTruncated || issue.blockersTruncated,
+    )
+  ) {
+    throw new Error(
+      "The authorised issue query was truncated. Refusing to give the planner incomplete tracker context.",
+    );
+  }
+  return JSON.stringify(result.issues, null, 2);
+}
+
+function readIssuePromptContext(issue: PlannedIssue): string {
+  const raw = capture("gh", [
+    "api",
+    "graphql",
+    "-f",
+    "query=query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){issue(number:$number){number title body comments(last:50){nodes{body} pageInfo{hasPreviousPage}} parent{number title body comments(last:50){nodes{body} pageInfo{hasPreviousPage}}}}}}",
+    "-F",
+    "owner=:owner",
+    "-F",
+    "repo=:repo",
+    "-F",
+    `number=${issue.id}`,
+    "--jq",
+    "{number: .data.repository.issue.number, title: .data.repository.issue.title, body: .data.repository.issue.body, comments: [.data.repository.issue.comments.nodes[].body], commentsTruncated: .data.repository.issue.comments.pageInfo.hasPreviousPage, parent: (if .data.repository.issue.parent == null then null else {number: .data.repository.issue.parent.number, title: .data.repository.issue.parent.title, body: .data.repository.issue.parent.body, comments: [.data.repository.issue.parent.comments.nodes[].body], commentsTruncated: .data.repository.issue.parent.comments.pageInfo.hasPreviousPage} end)}",
+  ]);
+  const context = issuePromptContextSchema.parse(JSON.parse(raw));
+  if (
+    context.number !== Number(issue.id) ||
+    context.title !== issue.title ||
+    context.commentsTruncated ||
+    context.parent?.commentsTruncated
+  ) {
+    throw new Error(
+      `Tracker context for #${issue.id} changed or was truncated after planning.`,
+    );
+  }
+  return JSON.stringify(context, null, 2);
+}
+
+const implementationLabels = [
+  "agent:implement",
+  "agent:queued",
+  "agent:in-progress",
+  "agent:blocked",
+] as const;
+
+type ImplementationLabel = (typeof implementationLabels)[number];
+
+// Move a ticket to exactly one pipeline label, or to none. Read the current
+// labels first so we only ask to remove what is really there: `gh` treats
+// removing an absent label as an error, and this runs on every ticket.
+function setPipelineLabel(
+  id: string,
+  label: ImplementationLabel | null,
+): boolean {
+  let current: string[] = [];
+  try {
+    current = capture("gh", [
+      "issue",
+      "view",
+      id,
+      "--json",
+      "labels",
+      "--jq",
+      '[.labels[].name] | join("\\n")',
+    ])
+      .split("\n")
+      .filter(Boolean);
+  } catch (error) {
+    console.warn(`  ! could not read labels on #${id}: ${error}`);
+    return false;
+  }
+
+  const stale = implementationLabels.filter(
+    (candidate) => candidate !== label && current.includes(candidate),
+  );
+  const add = label && !current.includes(label) ? ["--add-label", label] : [];
+
+  if (stale.length === 0 && add.length === 0) return true;
+
+  return gh(
+    "issue",
+    "edit",
+    id,
+    ...stale.flatMap((candidate) => ["--remove-label", candidate]),
+    ...add,
+  );
+}
+
+const claimSchema = z.object({
+  state: z.literal("OPEN"),
+  title: z.string().min(1),
+  labels: z.array(z.string()),
+  parent: z.number().int().positive().nullable(),
+  subIssueCount: z.number().int().nonnegative(),
+  blockedBy: z.array(z.number().int().positive()),
+  labelsTruncated: z.boolean(),
+  blockersTruncated: z.boolean(),
+});
+
+const recoveryIssueSchema = z.object({
+  state: z.enum(["OPEN", "CLOSED"]),
+  labels: z.array(z.string()),
+});
+
+function claimIssue(planned: PlannedIssue): boolean {
+  let issue: z.infer<typeof claimSchema>;
+  try {
+    const raw = capture("gh", [
+      "api",
+      "graphql",
+      "-f",
+      "query=query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){issue(number:$number){state title labels(first:50){nodes{name} pageInfo{hasNextPage}} parent{number} subIssues(first:1){totalCount} blockedBy(first:100){nodes{number state} pageInfo{hasNextPage}}}}}",
+      "-F",
+      "owner=:owner",
+      "-F",
+      "repo=:repo",
+      "-F",
+      `number=${planned.id}`,
+      "--jq",
+      '{state: .data.repository.issue.state, title: .data.repository.issue.title, labels: [.data.repository.issue.labels.nodes[].name], parent: (.data.repository.issue.parent.number // null), subIssueCount: .data.repository.issue.subIssues.totalCount, blockedBy: [.data.repository.issue.blockedBy.nodes[] | select(.state == "OPEN") | .number], labelsTruncated: .data.repository.issue.labels.pageInfo.hasNextPage, blockersTruncated: .data.repository.issue.blockedBy.pageInfo.hasNextPage}',
+    ]);
+    issue = claimSchema.parse(JSON.parse(raw));
+  } catch (error) {
+    console.warn(
+      `  ! could not validate claim for #${planned.id}: ${describeError(error)}`,
+    );
+    return false;
+  }
+
+  const required = ["ready-for-agent", "agent:implement"];
+  const refused = [
+    "roadmap",
+    "needs-info",
+    "ready-for-human",
+    "wontfix",
+    "agent:in-progress",
+    "agent:blocked",
+  ];
+  if (
+    required.some((label) => !issue.labels.includes(label)) ||
+    refused.some((label) => issue.labels.includes(label)) ||
+    issue.subIssueCount > 0 ||
+    issue.blockedBy.length > 0 ||
+    issue.labelsTruncated ||
+    issue.blockersTruncated ||
+    issue.title !== planned.title
+  ) {
+    console.warn(
+      `  ! #${planned.id} is no longer authorised or does not match the plan`,
+    );
+    return false;
+  }
+
+  const expectedBranch = `sandcastle/issue-${issue.parent ?? planned.id}`;
+  if (planned.branch !== expectedBranch) {
+    console.warn(
+      `  ! #${planned.id} planned branch ${planned.branch} does not match ${expectedBranch}`,
+    );
+    return false;
+  }
+
+  return setPipelineLabel(planned.id, "agent:in-progress");
+}
+
+function promoteUnblockedQueuedIssues(): void {
+  let queued: z.infer<typeof queuedIssuesSchema>;
+  try {
+    const raw = capture("gh", [
+      "api",
+      "graphql",
+      "-f",
+      'query=query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo){issues(states:OPEN,first:100,labels:["ready-for-agent","agent:queued"]){nodes{number labels(first:50){nodes{name} pageInfo{hasNextPage}} blockedBy(first:100){nodes{number state} pageInfo{hasNextPage}}} pageInfo{hasNextPage}}}}',
+      "-F",
+      "owner=:owner",
+      "-F",
+      "repo=:repo",
+      "--jq",
+      '{hasNextPage: .data.repository.issues.pageInfo.hasNextPage, issues: [.data.repository.issues.nodes[] | {id: .number, labels: [.labels.nodes[].name], blockedBy: [.blockedBy.nodes[] | select(.state == "OPEN") | .number], labelsTruncated: .labels.pageInfo.hasNextPage, blockersTruncated: .blockedBy.pageInfo.hasNextPage}]}',
+    ]);
+    queued = queuedIssuesSchema.parse(JSON.parse(raw));
+  } catch (error) {
+    console.warn(`  ! could not inspect queued issues: ${error}`);
+    return;
+  }
+  if (queued.hasNextPage) {
+    console.warn(
+      "  ! More than 100 queued issues exist; refusing promotion until the query is paginated.",
+    );
+    return;
+  }
+
+  const refused = [
+    "roadmap",
+    "needs-info",
+    "ready-for-human",
+    "wontfix",
+    "agent:implement",
+    "agent:in-progress",
+    "agent:blocked",
+  ];
+  for (const issue of queued.issues) {
+    const isQueued =
+      issue.labels.includes("ready-for-agent") &&
+      issue.labels.includes("agent:queued");
+    const isRefused = refused.some((label) => issue.labels.includes(label));
+    if (
+      !isQueued ||
+      isRefused ||
+      issue.blockedBy.length > 0 ||
+      issue.labelsTruncated ||
+      issue.blockersTruncated
+    ) {
+      continue;
+    }
+
+    if (setPipelineLabel(String(issue.id), "agent:implement")) {
+      console.log(`  Promoted queued issue #${issue.id} for implementation.`);
+    }
+  }
+}
+
+// Whether the branch is genuinely contained in the current branch. This is the
+// fact that makes closing an issue trustworthy: the merge agent reports what it
+// believes it merged, and this checks the repository instead.
+function branchLanded(branch: string, target = "HEAD"): boolean {
+  try {
+    capture("git", ["merge-base", "--is-ancestor", branch, target]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const activeClaims = new Map<string, ActiveClaim>();
+const closedPendingCleanup = new Set<string>();
+const shutdownController = new AbortController();
+const wholeRunSignal = AbortSignal.timeout(WHOLE_RUN_TIMEOUT_MS);
+let runStateTargetBranch: string | undefined;
+let runStateTargetHead: string | undefined;
+let runHadBlockedWork = false;
+
+function phaseSignal(timeoutMs: number): AbortSignal {
+  return AbortSignal.any([
+    shutdownController.signal,
+    wholeRunSignal,
+    AbortSignal.timeout(timeoutMs),
+  ]);
+}
+
+function persistRunState(): void {
+  if (activeClaims.size === 0) {
+    rmSync(RUN_STATE_PATH, { force: true });
+    return;
+  }
+  if (!runStateTargetBranch || !runStateTargetHead) {
+    throw new Error(
+      "Cannot persist claims before recording the target branch.",
+    );
+  }
+
+  const temporaryPath = `${RUN_STATE_PATH}.tmp`;
+  writeFileSync(
+    temporaryPath,
+    `${JSON.stringify(
+      {
+        targetBranch: runStateTargetBranch,
+        targetHead: runStateTargetHead,
+        issues: [...activeClaims.values()],
+      },
+      null,
+      2,
+    )}\n`,
+    { flag: "w" },
+  );
+  renameSync(temporaryPath, RUN_STATE_PATH);
+}
+
+function blockIssue(issue: PlannedIssue, reason: string): void {
+  if (!activeClaims.has(issue.id) || closedPendingCleanup.has(issue.id)) return;
+  runHadBlockedWork = true;
+
+  const safeReason = describeError(reason);
+  gh(
+    "issue",
+    "comment",
+    issue.id,
+    "--body",
+    `Sandcastle stopped work on \`${issue.branch}\`. ${safeReason}`,
+  );
+  if (setPipelineLabel(issue.id, "agent:blocked")) {
+    activeClaims.delete(issue.id);
+    persistRunState();
+  }
+}
+
+function closeLandedIssue(
+  issue: PlannedIssue,
+  targetBranch: string,
+  approvedSha: string,
+): boolean {
+  if (!branchLanded(approvedSha, targetBranch)) return false;
+
+  const closed = gh(
+    "issue",
+    "close",
+    issue.id,
+    "--comment",
+    `Completed by Sandcastle on \`${issue.branch}\`, merged into \`${targetBranch}\`.`,
+  );
+  if (!closed) {
+    blockIssue(
+      issue,
+      "The branch landed, but Sandcastle could not close the GitHub issue.",
+    );
+    return true;
+  }
+
+  if (!setPipelineLabel(issue.id, null)) {
+    closedPendingCleanup.add(issue.id);
+    runHadBlockedWork = true;
+    console.error(
+      `  ! Issue #${issue.id} closed, but its pipeline labels need reconciliation.`,
+    );
+    return true;
+  }
+
+  activeClaims.delete(issue.id);
+  persistRunState();
+  return true;
+}
+
+function recoverInterruptedRun(): void {
+  if (!existsSync(RUN_STATE_PATH)) return;
+
+  const state = runStateSchema.parse(
+    JSON.parse(readFileSync(RUN_STATE_PATH, "utf8")),
+  );
+  console.warn(
+    `Recovering ${state.issues.length} claim(s) from an interrupted Sandcastle run.`,
+  );
+
+  const unresolved: ActiveClaim[] = [];
+  for (const issue of state.issues) {
+    let current: z.infer<typeof recoveryIssueSchema>;
+    try {
+      const raw = capture("gh", [
+        "api",
+        "graphql",
+        "-f",
+        "query=query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){issue(number:$number){state labels(first:50){nodes{name}}}}}",
+        "-F",
+        "owner=:owner",
+        "-F",
+        "repo=:repo",
+        "-F",
+        `number=${issue.id}`,
+        "--jq",
+        "{state: .data.repository.issue.state, labels: [.data.repository.issue.labels.nodes[].name]}",
+      ]);
+      current = recoveryIssueSchema.parse(JSON.parse(raw));
+    } catch (error) {
+      console.warn(
+        `  ! Could not recover #${issue.id}: ${describeError(error)}`,
+      );
+      unresolved.push(issue);
+      continue;
+    }
+
+    if (current.state === "CLOSED") {
+      if (!setPipelineLabel(issue.id, null)) unresolved.push(issue);
+      continue;
+    }
+    if (!current.labels.includes("agent:in-progress")) continue;
+
+    if (branchLanded(issue.approvedSha ?? issue.branch, state.targetBranch)) {
+      const closed = gh(
+        "issue",
+        "close",
+        issue.id,
+        "--comment",
+        `Recovered after an interrupted Sandcastle run: \`${issue.branch}\` is already merged into \`${state.targetBranch}\`.`,
+      );
+      if (!closed) {
+        unresolved.push(issue);
+        continue;
+      }
+      if (!setPipelineLabel(issue.id, null)) unresolved.push(issue);
+      continue;
+    }
+
+    gh(
+      "issue",
+      "comment",
+      issue.id,
+      "--body",
+      `The previous Sandcastle process stopped while working on \`${issue.branch}\`. The branch and any dirty worktree were preserved for inspection. Requeue the issue after deciding whether to keep that work.`,
+    );
+    if (!setPipelineLabel(issue.id, "agent:blocked")) {
+      unresolved.push(issue);
+    } else {
+      runHadBlockedWork = true;
+    }
+  }
+
+  if (unresolved.length === 0) {
+    rmSync(RUN_STATE_PATH, { force: true });
+    return;
+  }
+
+  writeFileSync(
+    RUN_STATE_PATH,
+    `${JSON.stringify({ ...state, issues: unresolved }, null, 2)}\n`,
+  );
+  throw new Error(
+    `Could not recover ${unresolved.length} claim(s) from the previous run.`,
+  );
+}
+
+function assertTargetStable(targetBranch: string, expectedHead: string): void {
+  const currentBranch = capture("git", ["branch", "--show-current"]);
+  const currentHead = capture("git", ["rev-parse", "HEAD"]);
+  const dirty = capture("git", ["status", "--porcelain"]);
+
+  if (currentBranch !== targetBranch || currentHead !== expectedHead || dirty) {
+    throw new Error(
+      `Target checkout changed during the run. Expected clean ${targetBranch} at ${expectedHead}.`,
+    );
+  }
+}
+
+async function runIssuePipeline(
+  issue: PlannedIssue,
+  expectedTargetHead: string,
+): Promise<{ commits: { sha: string }[]; reason: string }> {
+  const issueContext = readIssuePromptContext(issue);
+  const sandbox = await sandcastle.createSandbox({
+    branch: issue.branch,
+    baseBranch: expectedTargetHead,
+    sandbox: docker({ imageName: DOCKER_IMAGE, env: { GH_TOKEN: "" } }),
+    hooks,
+    copyToWorktree,
+    timeouts: lifecycleTimeouts,
+  });
+  let pipelineFailed = false;
+
+  try {
+    const initialStatus = await sandbox.exec("git status --porcelain");
+    if (initialStatus.exitCode !== 0) {
+      throw new Error(
+        `Could not inspect the issue worktree: ${initialStatus.stderr}`,
+      );
+    }
+    if (initialStatus.stdout.trim()) {
+      throw new Error(
+        "The issue worktree contains uncommitted changes from an earlier run.",
+      );
+    }
+    const alignment = await sandbox.exec(
+      `git merge --ff-only ${expectedTargetHead}`,
+    );
+    if (alignment.exitCode !== 0) {
+      throw new Error(
+        `The issue branch has diverged from target commit ${expectedTargetHead}.`,
+      );
+    }
+
+    const implement = await sandbox.run({
+      name: `implementer-${issue.id}`,
+      // Cursor CLI runs are complete agent sessions and are not resumable by
+      // Sandcastle, so every phase gets exactly one harness iteration.
+      maxIterations: 1,
+      idleTimeoutSeconds: IDLE_TIMEOUT_SECONDS,
+      completionTimeoutSeconds: COMPLETION_TIMEOUT_SECONDS,
+      signal: phaseSignal(phaseTimeoutMs.implementer),
+      agent: sandcastle.cursor(agentModels.implementer),
+      promptFile: "./.sandcastle/implement-prompt.md",
+      promptArgs: {
+        TASK_ID: issue.id,
+        ISSUE_TITLE: issue.title,
+        BRANCH: issue.branch,
+        ISSUE_CONTEXT: issueContext,
+      },
+    });
+
+    const ahead = await sandbox.exec(
+      `git rev-list --count ${expectedTargetHead}..HEAD`,
+    );
+    const aheadCount = Number(ahead.stdout.trim());
+    if (
+      ahead.exitCode !== 0 ||
+      !Number.isSafeInteger(aheadCount) ||
+      aheadCount < 0
+    ) {
+      throw new Error(
+        `Could not inspect issue branch progress: ${ahead.stderr}`,
+      );
+    }
+    if (implement.commits.length === 0 && aheadCount === 0) {
+      return {
+        commits: [],
+        reason: "The implementer produced no commits.",
+      };
+    }
+    if (!implement.completionSignal) {
+      return {
+        commits: [],
+        reason:
+          "The implementer committed work but did not signal that the ticket was complete.",
+      };
+    }
+
+    const existingHead = await sandbox.exec("git rev-parse HEAD");
+    const existingHeadSha = existingHead.stdout.trim();
+    if (
+      existingHead.exitCode !== 0 ||
+      !/^[0-9a-f]{40}$/.test(existingHeadSha)
+    ) {
+      throw new Error(
+        `Could not resolve issue branch HEAD: ${existingHead.stderr}`,
+      );
+    }
+
+    const review = await sandbox.run({
+      name: `reviewer-${issue.id}`,
+      maxIterations: 1,
+      idleTimeoutSeconds: IDLE_TIMEOUT_SECONDS,
+      completionTimeoutSeconds: COMPLETION_TIMEOUT_SECONDS,
+      signal: phaseSignal(phaseTimeoutMs.reviewer),
+      agent: sandcastle.cursor(agentModels.reviewer),
+      promptFile: "./.sandcastle/review-prompt.md",
+      promptArgs: {
+        TASK_ID: issue.id,
+        ISSUE_TITLE: issue.title,
+        BRANCH: issue.branch,
+        ISSUE_CONTEXT: issueContext,
+      },
+    });
+
+    const reviewOutput = parseReview(review.stdout);
+    if (reviewOutput.verdict === "blocked") {
+      return {
+        commits: [],
+        reason: `Review blocked the merge: ${reviewOutput.summary}`,
+      };
+    }
+
+    const status = await sandbox.exec("git status --porcelain");
+    if (status.exitCode !== 0) {
+      return {
+        commits: [],
+        reason: `Could not verify the reviewed worktree: ${status.stderr}`,
+      };
+    }
+    if (status.stdout.trim()) {
+      return {
+        commits: [],
+        reason:
+          "The reviewer approved a dirty worktree. Uncommitted changes were preserved for inspection.",
+      };
+    }
+
+    const implementationCommits =
+      implement.commits.length > 0
+        ? implement.commits
+        : [{ sha: existingHeadSha }];
+    return {
+      commits: [...implementationCommits, ...review.commits],
+      reason: reviewOutput.summary,
+    };
+  } catch (error) {
+    pipelineFailed = true;
+    throw error;
+  } finally {
+    try {
+      const closed = await sandbox.close();
+      if (closed.preservedWorktreePath) {
+        console.warn(
+          `  ! Preserved dirty worktree for #${issue.id}: ${closed.preservedWorktreePath}`,
+        );
+      }
+    } catch (closeError) {
+      if (!pipelineFailed) throw closeError;
+      console.error(
+        `  ! Cleanup also failed for #${issue.id}: ${describeError(closeError)}`,
+      );
+    }
+  }
+}
+
+function temporaryBranch(phase: string, round: number): string {
+  return `sandcastle/${phase}-${process.pid}-${round}-${randomUUID().slice(0, 8)}`;
+}
+
+function deleteBranchIfMerged(branch: string, targetBranch: string): void {
+  if (!branchLanded(branch, targetBranch)) return;
+  try {
+    capture("git", ["branch", "-d", branch]);
+  } catch (error) {
+    console.warn(
+      `  ! Could not remove temporary branch ${branch}: ${describeError(error)}`,
+    );
+  }
+}
+
+async function withDeadline<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${timeoutMs}ms.`)),
+      timeoutMs,
+    );
+  });
+
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function buildIntegrationBranch(
+  approvedIssues: ApprovedIssue[],
+  expectedTargetHead: string,
+  round: number,
+): Promise<{ branch: string; head: string }> {
+  const branch = temporaryBranch("integration", round);
+  const sandbox = await sandcastle.createSandbox({
+    branch,
+    baseBranch: expectedTargetHead,
+    sandbox: docker({
+      imageName: DOCKER_IMAGE,
+      // Merge and verification need no tracker access.
+      env: { GH_TOKEN: "" },
+    }),
+    hooks,
+    copyToWorktree,
+    timeouts: lifecycleTimeouts,
+  });
+  let mergeFailed = false;
+
+  try {
+    const merge = await sandbox.run({
+      name: `merger-round-${round}`,
+      maxIterations: 1,
+      idleTimeoutSeconds: IDLE_TIMEOUT_SECONDS,
+      completionTimeoutSeconds: COMPLETION_TIMEOUT_SECONDS,
+      signal: phaseSignal(phaseTimeoutMs.merger),
+      agent: sandcastle.cursor(agentModels.merger),
+      promptFile: "./.sandcastle/merge-prompt.md",
+      promptArgs: {
+        BRANCHES: approvedIssues
+          .map(({ issue, sha }) => `- \`${issue.branch}\` at commit \`${sha}\``)
+          .join("\n"),
+        ISSUES: approvedIssues
+          .map(({ issue }) => `- ${issue.id}: ${issue.title}`)
+          .join("\n"),
+      },
+    });
+    if (!merge.completionSignal) {
+      throw new Error(
+        "The merger stopped without confirming that its verification passed.",
+      );
+    }
+
+    for (const { issue, sha } of approvedIssues) {
+      const ancestry = await sandbox.exec(
+        `git merge-base --is-ancestor ${sha} HEAD`,
+      );
+      if (ancestry.exitCode !== 0) {
+        throw new Error(
+          `The integration branch does not contain the reviewed commit ${sha} for #${issue.id}.`,
+        );
+      }
+    }
+
+    const verification = await withDeadline(
+      sandbox.exec("just check"),
+      phaseTimeoutMs.merger,
+      "Integration verification",
+    );
+    if (verification.exitCode !== 0) {
+      throw new Error(
+        `Orchestrator-run just check failed: ${verification.stderr || verification.stdout}`,
+      );
+    }
+
+    const status = await sandbox.exec("git status --porcelain");
+    if (status.exitCode !== 0 || status.stdout.trim()) {
+      throw new Error(
+        "The integration worktree is not clean after verification.",
+      );
+    }
+
+    const head = await sandbox.exec("git rev-parse HEAD");
+    if (head.exitCode !== 0 || !/^[0-9a-f]{40}$/.test(head.stdout.trim())) {
+      throw new Error(`Could not resolve integration HEAD: ${head.stderr}`);
+    }
+    return { branch, head: head.stdout.trim() };
+  } catch (error) {
+    mergeFailed = true;
+    throw error;
+  } finally {
+    try {
+      const closed = await sandbox.close();
+      if (closed.preservedWorktreePath) {
+        console.warn(
+          `  ! Preserved integration worktree: ${closed.preservedWorktreePath}`,
+        );
+      }
+    } catch (closeError) {
+      if (!mergeFailed) throw closeError;
+      console.error(
+        `  ! Integration cleanup also failed: ${describeError(closeError)}`,
+      );
+    }
+  }
+}
+
+async function main(): Promise<void> {
+  runPreflight();
+  shutdownController.signal.throwIfAborted();
+  recoverInterruptedRun();
+  shutdownController.signal.throwIfAborted();
+
+  // Read once before planning. The branch name remains fixed, while the
+  // expected head advances after each successful merge round.
+  const targetBranch = capture("git", ["branch", "--show-current"]);
+  let expectedTargetHead = capture("git", ["rev-parse", "HEAD"]);
+  runStateTargetBranch = targetBranch;
+  runStateTargetHead = expectedTargetHead;
+
+  for (let round = 1; round <= MAX_ROUNDS; round++) {
+    shutdownController.signal.throwIfAborted();
+    wholeRunSignal.throwIfAborted();
+    console.log(`\n=== Round ${round}/${MAX_ROUNDS} ===\n`);
+    assertTargetStable(targetBranch, expectedTargetHead);
+    promoteUnblockedQueuedIssues();
+
+    // Phase 1: plan only from the explicitly authorised tracker view. A named
+    // throwaway branch prevents a read-only planner mistake from touching the
+    // host checkout.
+    const plannerBranch = temporaryBranch("planner", round);
+    const authorizedIssues = readAuthorizedIssues();
+    const plan = await (async () => {
+      try {
+        const result = await sandcastle.run({
+          sandbox: docker({
+            imageName: DOCKER_IMAGE,
+            env: { GH_TOKEN: "" },
+          }),
+          branchStrategy: {
+            type: "branch",
+            branch: plannerBranch,
+            baseBranch: expectedTargetHead,
+          },
+          name: `planner-round-${round}`,
+          maxIterations: 1,
+          idleTimeoutSeconds: IDLE_TIMEOUT_SECONDS,
+          completionTimeoutSeconds: COMPLETION_TIMEOUT_SECONDS,
+          signal: phaseSignal(phaseTimeoutMs.planner),
+          timeouts: lifecycleTimeouts,
+          agent: sandcastle.cursor(agentModels.planner),
+          promptFile: "./.sandcastle/plan-prompt.md",
+          promptArgs: {
+            MAX_PARALLEL_ISSUES: String(MAX_PARALLEL_ISSUES),
+            AUTHORIZED_ISSUES: authorizedIssues,
+          },
+          output: sandcastle.Output.object({ tag: "plan", schema: planSchema }),
+        });
+        if (result.commits.length > 0 || result.preservedWorktreePath) {
+          throw new Error(
+            "The planner modified its read-only worktree. The changes were not applied to the target branch.",
+          );
+        }
+        return result;
+      } finally {
+        deleteBranchIfMerged(plannerBranch, targetBranch);
+      }
+    })();
+
+    const plannedIssues = plan.output.issues;
+    if (plannedIssues.length === 0) {
+      console.log("No unblocked issues to work on. Exiting.");
+      break;
+    }
+
+    console.log(
+      `Planning complete. ${plannedIssues.length} issue(s) selected:`,
+    );
+    for (const issue of plannedIssues) {
+      console.log(`  ${issue.id}: ${issue.title} → ${issue.branch}`);
+    }
+
+    const issues = plannedIssues.filter((issue) => {
+      const claimed = claimIssue(issue);
+      if (claimed) {
+        activeClaims.set(issue.id, issue);
+        persistRunState();
+      }
+      return claimed;
+    });
+
+    if (issues.length === 0) {
+      console.warn("No selected issue could be claimed. Stopping.");
+      break;
+    }
+
+    // Phase 2: independent pipelines fail independently.
+    const settled = await Promise.allSettled(
+      issues.map((issue) => runIssuePipeline(issue, expectedTargetHead)),
+    );
+
+    for (const [index, outcome] of settled.entries()) {
+      if (outcome.status === "rejected") {
+        console.error(
+          `  ✗ ${issues[index]!.id} (${issues[index]!.branch}) failed: ${describeError(outcome.reason)}`,
+        );
+      }
+    }
+
+    const entries = settled.map((outcome, index) => ({
+      outcome,
+      issue: issues[index]!,
+    }));
+    const completedIssues = entries
+      .filter(
+        (entry) =>
+          entry.outcome.status === "fulfilled" &&
+          entry.outcome.value.commits.length > 0,
+      )
+      .map((entry) => entry.issue);
+    const completedBranches = completedIssues.map((issue) => issue.branch);
+
+    for (const { outcome, issue } of entries) {
+      if (completedIssues.includes(issue)) continue;
+      const reason =
+        outcome.status === "rejected"
+          ? `The run failed: ${describeError(outcome.reason)}`
+          : outcome.value.reason;
+      blockIssue(issue, reason);
+    }
+
+    console.log(
+      `\nExecution complete. ${completedBranches.length} branch(es) with approved commits:`,
+    );
+    for (const branch of completedBranches) console.log(`  ${branch}`);
+
+    if (completedBranches.length === 0) {
+      console.log("No approved commits produced. Nothing to merge.");
+      continue;
+    }
+
+    const approvedIssues: ApprovedIssue[] = completedIssues.map((issue) => {
+      const sha = capture("git", [
+        "rev-parse",
+        "--verify",
+        `${issue.branch}^{commit}`,
+      ]);
+      if (!/^[0-9a-f]{40}$/.test(sha)) {
+        throw new Error(`Could not pin the reviewed commit for #${issue.id}.`);
+      }
+      activeClaims.set(issue.id, { ...issue, approvedSha: sha });
+      return { issue, sha };
+    });
+    persistRunState();
+
+    // Phase 3: build and verify a temporary integration branch. The host
+    // target moves only through a final, race-checked fast-forward.
+    let integration: { branch: string; head: string } | undefined;
+    try {
+      assertTargetStable(targetBranch, expectedTargetHead);
+      integration = await buildIntegrationBranch(
+        approvedIssues,
+        expectedTargetHead,
+        round,
+      );
+      assertTargetStable(targetBranch, expectedTargetHead);
+
+      const recordedIntegrationHead = capture("git", [
+        "rev-parse",
+        "--verify",
+        `${integration.branch}^{commit}`,
+      ]);
+      if (recordedIntegrationHead !== integration.head) {
+        throw new Error(
+          "The integration branch moved after verification. Refusing to update the target.",
+        );
+      }
+
+      capture("git", ["merge", "--ff-only", integration.head]);
+      expectedTargetHead = capture("git", ["rev-parse", "HEAD"]);
+      if (expectedTargetHead !== integration.head) {
+        throw new Error(
+          "The target did not advance to the verified integration.",
+        );
+      }
+      runStateTargetHead = expectedTargetHead;
+      persistRunState();
+    } catch (error) {
+      const reason = `The merge phase failed: ${describeError(error)}. The issue branch is preserved for retry.`;
+      console.error(reason);
+      for (const { issue, sha } of approvedIssues) {
+        if (!closeLandedIssue(issue, targetBranch, sha)) {
+          blockIssue(issue, reason);
+        }
+      }
+
+      const currentBranch = capture("git", ["branch", "--show-current"]);
+      const dirty = capture("git", ["status", "--porcelain"]);
+      if (currentBranch !== targetBranch || dirty) {
+        throw new Error(
+          "Stopping because the target checkout changed during the failed merge.",
+        );
+      }
+      expectedTargetHead = capture("git", ["rev-parse", "HEAD"]);
+      runStateTargetHead = expectedTargetHead;
+      persistRunState();
+      if (integration) {
+        deleteBranchIfMerged(integration.branch, targetBranch);
+      }
+      continue;
+    }
+
+    // Tracker completion follows repository fact, not the merge agent's claim.
+    for (const { issue, sha } of approvedIssues) {
+      if (!closeLandedIssue(issue, targetBranch, sha)) {
+        blockIssue(
+          issue,
+          `The reviewed commit ${sha} did not land in \`${targetBranch}\`. Its branch is preserved for retry.`,
+        );
+      }
+    }
+    deleteBranchIfMerged(integration.branch, targetBranch);
+
+    console.log("\nBranches merged.");
+  }
+
+  console.log("\nAll done.");
+  if (runHadBlockedWork && process.exitCode === undefined) {
+    console.warn("One or more issues require attention.");
+    process.exitCode = 2;
+  }
+}
+
+async function runSandcastle(): Promise<void> {
+  const releaseRunLock = acquireRunLock();
+  const releaseOnExit = () => releaseRunLock();
+  process.once("exit", releaseOnExit);
+
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.prependOnceListener(signal, () => {
+      shutdownController.abort(
+        new Error(`The orchestrator was interrupted by ${signal}.`),
+      );
+      for (const issue of activeClaims.values()) {
+        blockIssue(issue, `The orchestrator was interrupted by ${signal}.`);
+      }
+    });
+  }
+
+  try {
+    await main();
+  } catch (error) {
+    console.error(`\nSandcastle stopped: ${describeError(error)}`);
+    process.exitCode = 1;
+  } finally {
+    for (const issue of activeClaims.values()) {
+      if (closedPendingCleanup.has(issue.id)) continue;
+      blockIssue(
+        issue,
+        "The orchestrator stopped before it could finalize this issue.",
+      );
+    }
+    process.removeListener("exit", releaseOnExit);
+    releaseRunLock();
+  }
+}
+
+const entryPoint = process.argv[1] ? resolve(process.argv[1]) : undefined;
+if (entryPoint === fileURLToPath(import.meta.url)) await runSandcastle();

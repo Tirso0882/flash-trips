@@ -43,6 +43,19 @@ def test_kernel_importing_application_is_rejected(tmp_path: Path) -> None:
     )
 
 
+def test_application_importing_framework_is_rejected(tmp_path: Path) -> None:
+    shutil.copytree("src", tmp_path / "src")
+    shutil.copy(".importlinter", tmp_path / ".importlinter")
+    violation = tmp_path / "src/flash_trips/application/forbidden_framework.py"
+    violation.write_text("from fastapi import FastAPI\n", encoding="utf-8")
+
+    result = run_import_linter(tmp_path)
+
+    assert result.returncode == 1
+    assert "Application does not depend on adapters or composition" in result.stdout
+    assert "flash_trips.application is not allowed to import fastapi" in result.stdout
+
+
 def test_capability_importing_framework_is_rejected(tmp_path: Path) -> None:
     shutil.copytree("src", tmp_path / "src")
     shutil.copy(".importlinter", tmp_path / ".importlinter")

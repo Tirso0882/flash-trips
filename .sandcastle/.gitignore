@@ -1,0 +1,7 @@
+.env
+host-ca.pem
+logs/
+run.lock
+run-state.json
+run-state.json.tmp
+worktrees/

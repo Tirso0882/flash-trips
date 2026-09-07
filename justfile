@@ -24,6 +24,7 @@ lint:
 typecheck:
     uv run pyright
     pnpm exec tsc --project tsconfig.json
+    pnpm sandcastle:check
     pnpm --dir apps/web typecheck
 
 security:
@@ -32,6 +33,7 @@ security:
 
 test:
     uv run pytest
+    pnpm test:sandcastle
     pnpm test:traceability
     pnpm test:web-boundaries
     bash tests/scripts/publish-via-github-api.test.sh

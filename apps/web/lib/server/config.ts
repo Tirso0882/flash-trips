@@ -2,7 +2,7 @@ import "server-only";
 
 const localApiBaseUrl = "http://127.0.0.1:8000";
 
-export function apiBaseUrl(): string {
+function resolveApiBaseUrl(): string {
   const value = process.env.FLASH_TRIPS_API_BASE_URL;
 
   if (value === undefined) {
@@ -28,4 +28,11 @@ export function apiBaseUrl(): string {
     );
   }
   return url.origin;
+}
+
+let resolved: string | undefined;
+
+export function apiBaseUrl(): string {
+  resolved ??= resolveApiBaseUrl();
+  return resolved;
 }

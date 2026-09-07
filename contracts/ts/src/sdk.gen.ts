@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetServiceStatusData, GetServiceStatusErrors, GetServiceStatusResponses } from './types.gen';
+import type { GetAuthenticatedPrincipalData, GetAuthenticatedPrincipalErrors, GetAuthenticatedPrincipalResponses, GetServiceStatusData, GetServiceStatusErrors, GetServiceStatusResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -17,6 +17,15 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
      */
     meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
+
+/**
+ * Authenticated Principal
+ */
+export const getAuthenticatedPrincipal = <ThrowOnError extends boolean = false>(options?: Options<GetAuthenticatedPrincipalData, ThrowOnError>): RequestResult<GetAuthenticatedPrincipalResponses, GetAuthenticatedPrincipalErrors, ThrowOnError> => (options?.client ?? client).get<GetAuthenticatedPrincipalResponses, GetAuthenticatedPrincipalErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/authenticated-principal',
+    ...options
+});
 
 /**
  * Service Status

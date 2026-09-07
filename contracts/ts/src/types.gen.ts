@@ -5,6 +5,24 @@ export type ClientOptions = {
 };
 
 /**
+ * AuthenticatedPrincipalResponse
+ */
+export type AuthenticatedPrincipalResponse = {
+    /**
+     * Issuer
+     */
+    issuer: string;
+    /**
+     * Scopes
+     */
+    scopes: Array<string>;
+    /**
+     * Subject
+     */
+    subject: string;
+};
+
+/**
  * ProblemResponse
  */
 export type ProblemResponse = {
@@ -55,6 +73,43 @@ export type ServiceStatusResponse = {
      */
     status: 'ok';
 };
+
+export type GetAuthenticatedPrincipalData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/authenticated-principal';
+};
+
+export type GetAuthenticatedPrincipalErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemResponse;
+    /**
+     * Forbidden
+     */
+    403: ProblemResponse;
+    /**
+     * Not Found
+     */
+    404: ProblemResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ProblemResponse;
+};
+
+export type GetAuthenticatedPrincipalError = GetAuthenticatedPrincipalErrors[keyof GetAuthenticatedPrincipalErrors];
+
+export type GetAuthenticatedPrincipalResponses = {
+    /**
+     * Successful Response
+     */
+    200: AuthenticatedPrincipalResponse;
+};
+
+export type GetAuthenticatedPrincipalResponse = GetAuthenticatedPrincipalResponses[keyof GetAuthenticatedPrincipalResponses];
 
 export type GetServiceStatusData = {
     body?: never;
