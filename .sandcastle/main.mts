@@ -98,6 +98,7 @@ const RUN_STATE_PATH = ".sandcastle/run-state.json";
 const WHOLE_RUN_TIMEOUT_MS = TIME_BUDGET_MINUTES * 60 * 1_000;
 const AUTOPILOT_LABEL = "agent:autopilot";
 const GATES_CLEARED_LABEL = "agent:gates-cleared";
+export const AUTOPILOT_FEATURE_QUERY = `query($owner:String!,$repo:String!,$endCursor:String){repository(owner:$owner,name:$repo){issues(states:OPEN,first:100,after:$endCursor,labels:["${AUTOPILOT_LABEL}"]){nodes{number labels(first:50){nodes{name} pageInfo{hasNextPage}}} pageInfo{hasNextPage endCursor}}}}`;
 
 const lifecycleTimeouts = {
   copyToWorktreeMs: 10 * 60 * 1_000,
@@ -845,8 +846,8 @@ function authorizeAutopilotTasks(): void {
   let features: AutopilotFeature[];
   try {
     features = readPaginatedConnection(
-      `query($owner:String!,$repo:String!,$endCursor:String){repository(owner:$owner,name:$repo){issues(states:OPEN,first:100,after:$endCursor,labels:["${AUTOPILOT_LABEL}"]){nodes{number labels(first:50){nodes{name} pageInfo{hasNextPage}} subIssues(first:100){nodes{number body state labels(first:50){nodes{name} pageInfo{hasNextPage}} subIssues(first:1){totalCount} blockedBy(first:100){nodes{number state} pageInfo{hasNextPage}}} pageInfo{hasNextPage}}} pageInfo{hasNextPage endCursor}}}}`,
-      '{hasNextPage: .data.repository.issues.pageInfo.hasNextPage, endCursor: .data.repository.issues.pageInfo.endCursor, items: [.data.repository.issues.nodes[] | {id: .number, labels: [.labels.nodes[].name], labelsTruncated: .labels.pageInfo.hasNextPage, tasksTruncated: .subIssues.pageInfo.hasNextPage, tasks: [.subIssues.nodes[] | {id: .number, body, state, labels: [.labels.nodes[].name], subIssueCount: .subIssues.totalCount, blockedBy: [.blockedBy.nodes[] | select(.state == "OPEN") | .number], labelsTruncated: .labels.pageInfo.hasNextPage, blockersTruncated: .blockedBy.pageInfo.hasNextPage}]}]}',
+      AUTOPILOT_FEATURE_QUERY,
+      '{hasNextPage: .data.repository.issues.pageInfo.hasNextPage, endCursor: .data.repository.issues.pageInfo.endCursor, items: [.data.repository.issues.nodes[] | {id: .number, labels: [.labels.nodes[].name], labelsTruncated: .labels.pageInfo.hasNextPage, tasksTruncated: true, tasks: []}]}',
       autopilotFeatureSchema,
     );
     for (const feature of features) {
