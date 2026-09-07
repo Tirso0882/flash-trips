@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "issue": 242,
+  "title": "Fail closed on the catastrophic token cases and unsafe JWKS behaviour",
+  "outcome": "Rejected catastrophic access-token failures uniformly and constrained JWKS retrieval, caching, and key rotation.",
+  "checks": [
+    {
+      "name": "fail-closed token and JWKS contract",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/identity/test_access_tokens.py",
+        "tests/contract/test_runtime_settings.py"
+      ]
+    }
+  ]
+}

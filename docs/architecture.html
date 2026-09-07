@@ -684,12 +684,21 @@
                 <code>JwtAccessTokenVerifier</code> in
                 <code>src/flash_trips/adapters/identity/access_tokens.py</code>
                 verifies signed access tokens against an issuer, audience,
-                required scope, algorithm allowlist, and served JWKS, and is
-                proven against the deterministic local issuer in
-                <code>tests/identity/</code>. No runtime setting supplies those
-                values yet, so <code>create_app</code> still composes the
-                fail-closed <code>RejectingAccessTokenVerifier</code> until the
-                live provider lands.
+                access-token claim contract, required scope, asymmetric algorithm
+                allowlist, and served JWKS. It also rejects a token carrying
+                ID-token claims. JWKS retrieval uses only the configured HTTPS
+                destination, bounded by the versioned
+                <code>JwksFetchPolicy</code> in
+                <code>src/flash_trips/adapters/config.py</code> for timeout,
+                response size, cache lifetime, and refresh rate. Rotation
+                replaces retired cached keys, while neither an unknown key ID
+                nor a failing issuer can refetch faster than that refresh
+                interval. These boundaries are proven
+                against the deterministic TLS local issuer in
+                <code>tests/identity/</code>. No runtime setting supplies the
+                provider values yet, so <code>create_app</code> still composes
+                the fail-closed <code>RejectingAccessTokenVerifier</code> until
+                the live provider lands.
               </p>
               <p>
                 The PostgreSQL adapter implements the principal-scoped Planner

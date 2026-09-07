@@ -61,8 +61,8 @@ Persistence tests use real PostgreSQL. They skip only when `DATABASE_URL` and
 `MIGRATION_DATABASE_URL` are absent. CI and `.env.example` provide both values.
 
 Identity tests under `tests/identity/` mint tokens with an in-process issuer
-that serves its JWKS on a loopback listener. That listener is the only socket
-the default suite may open; every other test runs with sockets disabled.
+that serves its JWKS on a loopback listener. Apart from that listener and the
+PostgreSQL persistence tests, every test runs with sockets disabled.
 
 Local and CI configuration grants zero live-call authority. Identity, model,
 travel-provider, and Azure calls are outside this scaffold.
