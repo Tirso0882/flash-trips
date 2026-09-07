@@ -24,17 +24,17 @@ permissions:
   id-token: write
 
 jobs:
-  release:
+  plan:
     if: >-
       vars.AZURE_RELEASE_CLIENT_ID != '' &&
       (github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     outputs:
-      api-image: ${{ steps.images.outputs.api-image }}
+      deploy: ${{ steps.release-plan.outputs.deploy }}
+      reason: ${{ steps.release-plan.outputs.reason }}
       release-sha: ${{ steps.source.outputs.release-sha }}
-      web-image: ${{ steps.images.outputs.web-image }}
     steps:
       - name: Check out release source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -53,6 +53,50 @@ jobs:
           git merge-base --is-ancestor "$release_sha" origin/main
           printf 'release-sha=%s\n' "$release_sha" >> "$GITHUB_OUTPUT"
 
+      - name: Decide whether production deployment is needed
+        id: release-plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_SHA: ${{ steps.source.outputs.release-sha }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            printf 'deploy=true\n' >> "$GITHUB_OUTPUT"
+            printf 'reason=manual production release requested\n' >> "$GITHUB_OUTPUT"
+          else
+            scripts/production-release-plan.sh \
+              "$EVENT_NAME" \
+              "$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summarize release plan
+        env:
+          DEPLOY: ${{ steps.release-plan.outputs.deploy }}
+          REASON: ${{ steps.release-plan.outputs.reason }}
+          RELEASE_SHA: ${{ steps.source.outputs.release-sha }}
+        run: |
+          {
+            printf '### Production release plan\n\n'
+            printf -- '- Commit: `%s`\n' "$RELEASE_SHA"
+            printf -- '- Deploy: `%s`\n' "$DEPLOY"
+            printf -- '- Reason: %s\n' "$REASON"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    needs:
+      - plan
+    if: needs.plan.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      api-image: ${{ steps.images.outputs.api-image }}
+      release-sha: ${{ needs.plan.outputs.release-sha }}
+      web-image: ${{ steps.images.outputs.web-image }}
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.plan.outputs.release-sha }}
+
       - name: Sign in to Azure for image publication
         uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac
         with:
@@ -64,7 +108,7 @@ jobs:
         id: images
         env:
           ACR_NAME: ${{ vars.AZURE_ACR_NAME }}
-          RELEASE_SHA: ${{ steps.source.outputs.release-sha }}
+          RELEASE_SHA: ${{ needs.plan.outputs.release-sha }}
         run: |
           login_server="$(az acr show --name "$ACR_NAME" --query loginServer --output tsv)"
           az acr login --name "$ACR_NAME"
