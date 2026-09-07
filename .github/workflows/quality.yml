@@ -1,11 +1,14 @@
-name: Quality
+name: CI
 
 on:
   pull_request:
   push:
     branches:
-      - dev
       - main
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -114,3 +117,32 @@ jobs:
           test -s "$api_response"
           test -s "$bff_response"
           cmp "$api_response" "$bff_response"
+
+  traceability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      LIVE_CALL_ALLOWANCE: "0"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate requirements and generated coverage
+        run: pnpm traceability
+
+      - name: Run negative validator tests
+        run: pnpm test:traceability
