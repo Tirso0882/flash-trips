@@ -346,6 +346,7 @@ function capture(command: string, args: string[]): string {
   return execFileSync(command, args, {
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
     timeout: HOST_COMMAND_TIMEOUT_MS,
   }).trim();
 }
@@ -1071,7 +1072,7 @@ function promoteUnblockedQueuedIssues(): void {
 
 // Whether one pinned commit is genuinely contained in another local ref.
 // Publication verification adds the remote fact required before Task closure.
-function branchLanded(branch: string, target = "HEAD"): boolean {
+export function branchLanded(branch: string, target = "HEAD"): boolean {
   try {
     capture("git", ["merge-base", "--is-ancestor", branch, target]);
     return true;

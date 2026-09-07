@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
   AUTOPILOT_FEATURE_QUERY,
+  branchLanded,
   hasExternalPreRunGates,
   parseAfkEnvironment,
   parseReview,
@@ -254,6 +256,28 @@ describe("Sandcastle AFK environment", () => {
 });
 
 describe("Sandcastle prompt wiring", () => {
+  it("keeps expected missing-ref probes out of operator output", () => {
+    const moduleUrl = new URL("./main.mts", import.meta.url).href;
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "--eval",
+        `import { branchLanded } from ${JSON.stringify(moduleUrl)}; if (branchLanded("refs/heads/sandcastle-test-missing")) process.exit(2);`,
+      ],
+      { encoding: "utf8" },
+    );
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, "");
+    assert.equal(
+      branchLanded("refs/heads/sandcastle-test-missing"),
+      false,
+    );
+  });
+
   it("requires the repository default branch as the PR base", () => {
     const source = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
 
