@@ -17,18 +17,28 @@ before starting the sandbox:
 
 </issue-context>
 
-## Branch diff
+## Review scope
 
-!`git diff {{TARGET_BRANCH}}...{{BRANCH}}`
+Pin `{{TARGET_BRANCH}}` as the fixed comparison point. The worktree is on
+`{{BRANCH}}`.
 
-## Commits on this branch
+Inspect the change from the worktree instead of expecting the diff in this
+prompt. Start with:
 
-!`git log {{TARGET_BRANCH}}..{{BRANCH}} --oneline`
+1. `git status --short`
+2. `git log --oneline {{TARGET_BRANCH}}..HEAD`
+3. `git diff --stat {{TARGET_BRANCH}}...HEAD`
+4. `git diff --name-status {{TARGET_BRANCH}}...HEAD`
+5. `git diff {{TARGET_BRANCH}}...HEAD -- <path>` for every changed path
+
+Cover every changed path. Use focused diff commands, `git show`, and file reads
+as needed so generated files, renames, and large changes do not crowd relevant
+code out of the review context.
 
 # REVIEW PROCESS
 
-1. **Understand the change**: Read the supplied issue context, diff, and commits
-   above. Pin `{{TARGET_BRANCH}}` as the fixed point for the whole review.
+1. **Understand the change**: Read the supplied issue context, then inspect all
+   commits and changed paths against the fixed comparison point above.
 
 2. **Run two independent review axes**: Run them in parallel if subagents are
    available. Otherwise make two separate passes. Keep their findings separate

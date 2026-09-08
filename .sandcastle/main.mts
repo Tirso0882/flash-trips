@@ -1625,7 +1625,9 @@ function temporaryBranch(phase: string, round: number): string {
 function deleteBranchIfMerged(branch: string, targetBranch: string): void {
   if (!branchLanded(branch, targetBranch)) return;
   try {
-    capture("git", ["branch", "-d", branch]);
+    // `git branch -d` checks merge ancestry against the current branch, not
+    // targetBranch. The explicit check above is the deletion safety gate.
+    capture("git", ["branch", "-D", branch]);
   } catch (error) {
     console.warn(
       `  ! Could not remove temporary branch ${branch}: ${describeError(error)}`,

@@ -157,7 +157,8 @@ The implementation prompt tells the agent to start at the ticket's `Touches`
 paths, read only cited ADRs and relevant domain terms, and extend tests at
 named public seams
 ([prompt](../../.sandcastle/implement-prompt.md#L10-L78)). The reviewer receives
-the exact issue context and branch diff
+the exact issue context, a pinned comparison point, and commands for inspecting
+the complete branch diff incrementally from the worktree
 ([review prompt](../../.sandcastle/review-prompt.md#L1-L28)). The planner sees
 only a validated authorized backlog
 ([plan prompt](../../.sandcastle/plan-prompt.md#L1-L39)).
