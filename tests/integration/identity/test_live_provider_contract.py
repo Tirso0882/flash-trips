@@ -16,13 +16,13 @@ def _runtime_values() -> dict[str, object]:
         ),
         "external_identity_allowlist": [
             {
-                "issuer": f"https://flashtrips.ciamlogin.com/{tenant_id}/v2.0",
+                "issuer": f"https://{tenant_id}.ciamlogin.com/{tenant_id}/v2.0",
                 "subject": "disposable-planner",
             }
         ],
         "flash_trips_oidc_client_id": "01991e28-1d65-7000-8000-000000000002",
         "flash_trips_oidc_issuer": (
-            f"https://flashtrips.ciamlogin.com/{tenant_id}/v2.0"
+            f"https://{tenant_id}.ciamlogin.com/{tenant_id}/v2.0"
         ),
         "flash_trips_oidc_tenant_id": tenant_id,
         "flash_trips_oidc_tenant_subdomain": "flashtrips",

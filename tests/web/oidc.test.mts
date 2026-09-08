@@ -132,7 +132,8 @@ test("the short-lived transaction cookie hides PKCE data and rejects tampering",
 
   assert.equal(cookie.includes(transaction.codeVerifier), false);
   assert.deepEqual(store.open(cookie), transaction);
-  assert.equal(store.open(`${cookie.slice(0, -1)}A`), null);
+  const tamperedCookie = `${cookie[0] === "A" ? "B" : "A"}${cookie.slice(1)}`;
+  assert.equal(store.open(tamperedCookie), null);
   now = new Date("2026-09-08T10:10:00.001Z");
   assert.equal(store.open(cookie), null);
 });

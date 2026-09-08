@@ -6,9 +6,9 @@ Date checked: 2026-09-08
 
 ## Proposal
 
-Use Microsoft Entra External ID for the single-Planner pilot if the corrected
-disposable registration passes the remaining live callback check. Keep Auth0
-as the provider-neutral fallback. This record does not approve the choice.
+Use Microsoft Entra External ID for the single-Planner pilot if the disposable
+registration passes the remaining live callback check. Keep Auth0 as the
+provider-neutral fallback. This record does not approve the choice.
 
 The implementation depends only on OIDC discovery, Authorization Code with
 PKCE, JWT/JWKS verification, and the application-owned External Identity and
@@ -30,14 +30,18 @@ The deterministic suite proves the following without live credentials:
 - token and authorization-code canaries do not enter responses, logs, or test
   evidence.
 
-The disposable Entra tenant discovery check on 2026-09-08 found HTTPS
-authorization, token, and JWKS endpoints on the configured tenant host and
-advertised RS256 ID-token signing. It also found that the discovery document's
-issuer host does not equal `FLASH_TRIPS_OIDC_ISSUER`; the scheme and
-case-folded tenant path do match. Exact issuer validation therefore fails
-closed. No authorization code or token was requested, captured, or recorded.
-The authenticated Google callback remains unproved until the disposable
-registration supplies the discovery issuer exactly.
+The disposable Entra tenant checks on 2026-09-08 found that the exact discovery
+issuer uses `<tenant-id>.ciamlogin.com`, while the authorization, token, and
+JWKS endpoints use `<tenant-subdomain>.ciamlogin.com`. The corrected
+configuration matches that issuer exactly. All three service endpoints use
+HTTPS, discovery advertises RS256 ID-token signing, and a live authorization
+request with S256 PKCE and the exact registered redirect reached the tenant's
+Google sign-in surface without a provider error. The token endpoint rejected a
+synthetic invalid code and verifier. No authorization code or token was
+captured or recorded.
+
+The authenticated Google callback remains unproved because the live check did
+not submit Google account credentials or receive an authorization code.
 
 ## Current entitlement and cost
 
@@ -55,11 +59,10 @@ entitlement and recheck both offers before approval.
 
 ## Approval and disposal gate
 
-Before approving this proposal, correct the configured issuer, run one
-redacted Google callback through the exact registered redirect, verify
-server-side sign-out and cookie replay denial, and record only pass/fail facts.
-The development registration must remain separate from any hosted
-registration.
+Before approving this proposal, run one redacted Google callback through the
+exact registered redirect, verify server-side sign-out and cookie replay
+denial, and record only pass/fail facts. The development registration must
+remain separate from any hosted registration.
 
 The disposable registration and client secret are offered for explicit
 transfer to the maintainer only if this proposal is approved. Otherwise the

@@ -99,7 +99,7 @@ class RuntimeSettings(BaseSettings):
             if tenant_id_value is None or subdomain is None or issuer is None:
                 raise ValueError("OIDC verifier configuration must be complete")
             tenant_id = str(UUID(tenant_id_value))
-            if issuer != f"https://{subdomain}.ciamlogin.com/{tenant_id}/v2.0":
+            if issuer != f"https://{tenant_id}.ciamlogin.com/{tenant_id}/v2.0":
                 raise ValueError("OIDC issuer must be the exact external tenant issuer")
         return self
 

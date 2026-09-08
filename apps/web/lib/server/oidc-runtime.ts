@@ -48,7 +48,7 @@ function providerEnvironment(): {
 
   const providerHostname = `${tenantSubdomain}.ciamlogin.com`;
   const issuer = requiredEnvironment("FLASH_TRIPS_OIDC_ISSUER");
-  const expectedIssuer = `https://${providerHostname}/${tenantId}/v2.0`;
+  const expectedIssuer = `https://${tenantId}.ciamlogin.com/${tenantId}/v2.0`;
   if (issuer !== expectedIssuer) {
     throw new Error("FLASH_TRIPS_OIDC_ISSUER is not the exact tenant issuer");
   }
