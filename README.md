@@ -70,6 +70,16 @@ Persistence tests use real PostgreSQL. They skip only when `DATABASE_URL` and
 pair must also have an exact row in `external_identities` linked to an active
 Planner before the protected route grants access.
 
+The web BFF reads and writes `application_sessions` over its own PostgreSQL
+connection, so the web process needs `DATABASE_URL` alongside
+`FLASH_TRIPS_API_BASE_URL`. Alembic still owns that table's schema. The BFF
+requires `FLASH_TRIPS_ALLOWED_ORIGINS` as a comma-separated list
+of exact browser origins. `FLASH_TRIPS_SESSION_DIGEST_KEY` and
+`FLASH_TRIPS_SESSION_TOKEN_KEY` are separate base64url-encoded 32-byte keys.
+The first protects opaque session identifiers stored in PostgreSQL, and the
+second encrypts the exact-audience access token retained by the BFF. The values
+in `.env.example` are local-only and must be replaced outside local development.
+
 Identity tests under `tests/identity/` mint tokens with an in-process issuer
 that serves its JWKS on a loopback listener. Apart from that listener and the
 PostgreSQL persistence tests, every test runs with sockets disabled.
@@ -132,12 +142,27 @@ preflight or orchestration failed, and `2` means one or more Tasks require
 attention. A clean run with no authorized Tasks exits without creating work.
 Use Ctrl-C to stop safely. The next run reads `.sandcastle/run-state.json`,
 reconciles interrupted claims, and preserves unfinished work for inspection.
+The state file records claimed, reviewed, integrated, and published
+checkpoints. If integration or publication fails after review, the next run
+continues from the latest verified checkpoint before planning new work. It does
+not rerun the paid implementer or reviewer.
 
-Set `SANDCASTLE_TASK_BUDGET` and `SANDCASTLE_TIME_BUDGET_MINUTES` in
-`.sandcastle/.env` to bound one AFK run. A Task with external pre-run gates
-also needs `agent:gates-cleared`. If it declares an `## AFK environment`
-section, allowlist those variable names with `SANDCASTLE_TASK_ENV_ALLOWLIST`.
-Sandcastle passes only those configured values to that Task sandbox.
+The default spending envelope is one Task at a time, at most five Tasks, and
+at most 120 minutes per AFK run. Set `SANDCASTLE_MAX_PARALLEL_ISSUES`,
+`SANDCASTLE_TASK_BUDGET`, and `SANDCASTLE_TIME_BUDGET_MINUTES` in
+`.sandcastle/.env` to change those limits. Concurrency has a hard cap of three.
+Sandcastle prints the active limits before it claims any work.
+
+Each Cursor implementer gets one paid, non-resumable session. Its prompt starts
+from the ticket's named paths and tests, forbids delegated exploration, and
+requires an early test run or test edit. An implementer that still exits
+without a commit is blocked for inspection instead of receiving an automatic
+paid retry.
+
+A Task with external pre-run gates also needs `agent:gates-cleared`. If it
+declares an `## AFK environment` section, allowlist those variable names with
+`SANDCASTLE_TASK_ENV_ALLOWLIST`. Sandcastle passes only those configured values
+to that Task sandbox.
 
 When a Feature has no remaining agent Tasks, Sandcastle marks its pull request
 ready and enables squash auto-merge. GitHub merges only after the required

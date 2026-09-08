@@ -65,7 +65,7 @@ def test_migration_history_has_one_head_that_matches_the_mapped_models(
 ) -> None:
     heads = run_alembic("heads").stdout.strip().splitlines()
 
-    assert heads == ["0003_external_identity (head)"]
+    assert heads == ["0004_application_session (head)"]
     run_alembic("check")
 
 
@@ -86,11 +86,18 @@ def test_planner_table_appears_on_upgrade_and_is_removed_on_rollback() -> None:
         run_alembic("upgrade", "head")
         with psycopg.connect(runtime_url) as connection, connection.cursor() as cursor:
             cursor.execute("SELECT version_num FROM alembic_version")
-            assert cursor.fetchone() == ("0003_external_identity",)
+            assert cursor.fetchone() == ("0004_application_session",)
             cursor.execute("SELECT to_regclass('public.planners')")
             assert cursor.fetchone() == ("planners",)
             cursor.execute("SELECT to_regclass('public.external_identities')")
             assert cursor.fetchone() == ("external_identities",)
+            cursor.execute("SELECT to_regclass('public.application_sessions')")
+            assert cursor.fetchone() == ("application_sessions",)
+
+        run_alembic("downgrade", "0003_external_identity")
+        with psycopg.connect(runtime_url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT to_regclass('public.application_sessions')")
+            assert cursor.fetchone() == (None,)
 
         run_alembic("downgrade", "0002_planner")
         with psycopg.connect(runtime_url) as connection, connection.cursor() as cursor:

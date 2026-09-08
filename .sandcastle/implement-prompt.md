@@ -8,6 +8,23 @@ sibling Tasks may run at the same time, so do not absorb their scope.
 
 Only work on the issue specified. If you finish early, stop.
 
+# PAID SESSION CONTRACT
+
+You have one paid, non-resumable session. A planning-only response wastes the
+entire Task attempt.
+
+- Do not delegate exploration to subagents. They cannot implement in this
+  worktree, and their findings do not survive this session.
+- Start from the ticket's `Touches`, `Seams`, and `Tests`. Read only files
+  needed for the next red-green step.
+- Before your twelfth tool call, either run the named targeted test or make the
+  first test edit. Do not perform a broad repository survey first.
+- Do not stop after analysis, a plan, or a progress update. Continue using
+  tools until you have committed complete work or found a concrete blocker
+  that makes implementation unsafe.
+- If blocked, name the missing fact or failed command precisely. Do not spend
+  the rest of the session researching unrelated paths.
+
 # READ THE TICKET
 
 The host orchestrator fetched this Task, its comments, and its parent Feature
@@ -38,7 +55,9 @@ Here are the last 10 commits:
 
 # EXPLORATION
 
-Explore the repo and fill your context window with what you need, starting from the paths in the ticket's `Touches` line.
+Explore narrowly from the paths in the ticket's `Touches` line. Read the named
+test seam and the production code directly behind it, then begin the first
+red-green cycle.
 
 Pay extra attention to the existing tests that touch the relevant code. `tests/contract/` holds the boundary tests: import rules, hermetic network, structured logging, runtime settings, HTTP status shapes, and generated-OpenAPI staleness. If your change is visible at a boundary, one of those files probably already tests the boundary and should be extended rather than duplicated.
 

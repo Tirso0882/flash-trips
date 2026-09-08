@@ -646,11 +646,15 @@
               <path class="flow" d="M710 105 H770" />
               <path class="flow" d="M710 185 H770" />
               <path class="flow" d="M710 285 H770" />
+              <path class="flow" d="M335 95 V38 H880 V55" />
               <text class="svg-label" x="210" y="191" text-anchor="middle">
                 HTTPS
               </text>
               <text class="svg-label" x="460" y="191" text-anchor="middle">
                 typed HTTP
+              </text>
+              <text class="svg-label" x="607" y="30" text-anchor="middle">
+                application sessions
               </text>
             </svg>
           </div>
@@ -709,10 +713,23 @@
                 runtime composition validates the configured single-entry
                 allowlist and connects that resolver to the protected route,
                 but the default token verifier still rejects every token until
-                provider settings land. Both tables are managed by the linear,
-                reversible Alembic history. Secure session policy constants,
-                JSON logger, Key Vault access, and Application Insights
-                resources are also not connected.
+                provider settings land. The linear, reversible Alembic history
+                also creates <code>application_sessions</code>, which stores
+                only a keyed digest of each opaque browser identifier and an
+                encrypted exact-audience access token. The BFF session manager
+                in <code>apps/web/lib/server/session.ts</code> enforces idle
+                and absolute expiry, revocation, origin validation, and
+                session-bound CSRF. It reaches that table over its own
+                PostgreSQL connection from
+                <code>apps/web/lib/server/session-runtime.ts</code> rather than
+                through FastAPI, so the web process needs
+                <code>DATABASE_URL</code> as well as the API base URL. The auth
+                session and sign-out routes use the shared cookie policy and
+                answer an unusable session with the same RFC 9457 problem shape
+                the API returns. The server-only issuance helper is ready for
+                the provider callback, which remains owned by the live PKCE
+                task. The JSON logger, Key Vault access, and
+                Application Insights resources are not connected.
               </p>
             </article>
             <article class="panel">
@@ -1014,6 +1031,13 @@
             integration agent merges the run's pinned <code>main</code> commit
             before reviewed Task commits, keeping long-lived Feature branches
             current without rewriting their published history.
+            <code>.sandcastle/run-state.json</code> durably records claimed,
+            reviewed, integrated, and published checkpoints. Recovery resumes
+            reviewed work at integration and retries publication from its
+            verified integration commit before planning new Tasks. Paid
+            implementers use one non-resumable session with a direct-execution
+            prompt. The default run limits are one concurrent Task, five Tasks,
+            and 120 minutes.
           </p>
           <div class="diagram">
             <svg
@@ -1113,7 +1137,7 @@
                 rx="8"
               />
               <text class="svg-title" x="960" y="84" text-anchor="middle">
-                Task pipelines, max 3
+                Task pipelines, hard max 3
               </text>
               <text class="svg-copy" x="960" y="106" text-anchor="middle">
                 sandcastle/task-{number}
@@ -1137,7 +1161,7 @@
                 test, code, verify, commit
               </text>
               <text class="svg-label" x="225" y="316" text-anchor="middle">
-                no tracker writes
+                one paid session, no retry
               </text>
 
               <rect
@@ -1295,6 +1319,11 @@
             <code>agent:autopilot</code> to a Feature authorizes repeated Task
             claims, spending, branch publication, and pull-request updates.
             Remove it to stop new claims. An already claimed Task finishes.
+            Interruptions before review still block the Task for inspection.
+            An empty implementer exit is not retried automatically.
+            Reviewed and integrated checkpoints remain
+            <code>agent:in-progress</code> so the next run can resume without
+            paying for implementation or review again.
           </div>
         </section>
 

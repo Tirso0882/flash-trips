@@ -1,8 +1,11 @@
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import (
     CheckConstraint,
+    DateTime,
     ForeignKey,
+    LargeBinary,
     MetaData,
     String,
     UniqueConstraint,
@@ -54,4 +57,65 @@ class ExternalIdentityModel(PostgresBase):
         ForeignKey("planners.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
+    )
+
+
+class ApplicationSessionModel(PostgresBase):
+    __tablename__ = "application_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "octet_length(identifier_digest) = 32",
+            name="identifier_digest_length",
+        ),
+        CheckConstraint("octet_length(csrf_digest) = 32", name="csrf_digest_length"),
+        CheckConstraint(
+            "octet_length(access_token_iv) = 12",
+            name="access_token_iv_length",
+        ),
+        CheckConstraint("last_seen_at >= created_at", name="last_seen_after_creation"),
+        CheckConstraint(
+            "idle_expires_at > last_seen_at",
+            name="idle_expiry_after_last_seen",
+        ),
+        CheckConstraint(
+            "absolute_expires_at > created_at",
+            name="absolute_expiry_after_creation",
+        ),
+        UniqueConstraint("identifier_digest"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    planner_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("planners.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    identifier_digest: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    csrf_digest: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    access_token_ciphertext: Mapped[bytes] = mapped_column(
+        LargeBinary,
+        nullable=False,
+    )
+    access_token_iv: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    idle_expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    absolute_expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )

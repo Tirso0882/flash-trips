@@ -6,12 +6,16 @@ import { describe, it } from "node:test";
 import {
   AUTOPILOT_FEATURE_QUERY,
   branchLanded,
+  DEFAULT_MAX_PARALLEL_ISSUES,
+  DEFAULT_TASK_BUDGET,
+  DEFAULT_TIME_BUDGET_MINUTES,
   hasExternalPreRunGates,
   parseAfkEnvironment,
   parseReview,
   planSchema,
   positiveIntegerSetting,
   resolveTaskEnvironment,
+  runStateSchema,
   selectAutopilotAuthorizations,
 } from "./main.mts";
 
@@ -112,6 +116,71 @@ describe("Sandcastle review parsing", () => {
   });
 });
 
+describe("Sandcastle durable checkpoints", () => {
+  const sha = (character: string) => character.repeat(40);
+
+  it("migrates an existing approved claim to the reviewed checkpoint", () => {
+    const state = runStateSchema.parse({
+      targetBranch: "main",
+      targetHead: sha("a"),
+      issues: [
+        {
+          ...issue("12"),
+          parent: 10,
+          parentTitle: "Feature",
+          approvedSha: sha("b"),
+        },
+      ],
+    });
+
+    assert.equal(state.issues[0]!.checkpoint, "reviewed");
+    assert.equal(
+      state.issues[0]!.integrationBranch,
+      "sandcastle/feature-10",
+    );
+  });
+
+  it("accepts a complete integration checkpoint for publication retry", () => {
+    const state = runStateSchema.parse({
+      targetBranch: "main",
+      targetHead: sha("a"),
+      issues: [
+        {
+          ...issue("12"),
+          parent: 10,
+          parentTitle: "Feature",
+          integrationBranch: "sandcastle/feature-10",
+          checkpoint: "integrated",
+          approvedSha: sha("b"),
+          integrationHead: sha("c"),
+          expectedRemoteTree: sha("d"),
+        },
+      ],
+    });
+
+    assert.equal(state.issues[0]!.checkpoint, "integrated");
+    assert.equal(state.issues[0]!.integrationHead, sha("c"));
+  });
+
+  it("rejects an integration checkpoint without publication preconditions", () => {
+    assert.throws(() =>
+      runStateSchema.parse({
+        targetBranch: "main",
+        targetHead: sha("a"),
+        issues: [
+          {
+            ...issue("12"),
+            parent: null,
+            parentTitle: null,
+            checkpoint: "integrated",
+            approvedSha: sha("b"),
+          },
+        ],
+      }),
+    );
+  });
+});
+
 describe("Sandcastle Feature autopilot", () => {
   it("discovers Features without nesting their Task graph", () => {
     assert.doesNotMatch(AUTOPILOT_FEATURE_QUERY, /\bsubIssues\s*\(/);
@@ -200,6 +269,21 @@ describe("Sandcastle Feature autopilot", () => {
 });
 
 describe("Sandcastle AFK environment", () => {
+  it("uses conservative default spending limits", () => {
+    assert.equal(DEFAULT_MAX_PARALLEL_ISSUES, 1);
+    assert.equal(DEFAULT_TASK_BUDGET, 5);
+    assert.equal(DEFAULT_TIME_BUDGET_MINUTES, 120);
+  });
+
+  it("reports the active spending limits before claiming work", () => {
+    const source = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
+
+    assert.match(
+      source,
+      /AFK limits: \$\{MAX_PARALLEL_ISSUES\} concurrent, \$\{TASK_BUDGET\} Tasks, \$\{TIME_BUDGET_MINUTES\} minutes/,
+    );
+  });
+
   it("parses only a strict names-only environment section", () => {
     assert.deepEqual(
       parseAfkEnvironment(
@@ -256,6 +340,25 @@ describe("Sandcastle AFK environment", () => {
 });
 
 describe("Sandcastle prompt wiring", () => {
+  it("requires the paid implementer session to execute instead of only explore", () => {
+    const source = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
+    const prompt = readFileSync(
+      new URL("./implement-prompt.md", import.meta.url),
+      "utf8",
+    );
+    const pipeline = source.match(
+      /async function runIssuePipeline[\s\S]*?\n}\n\nasync function integrateAndPublishGroup/,
+    )?.[0];
+
+    assert.ok(pipeline);
+    assert.match(pipeline, /name: `implementer-\$\{issue\.id\}`,[\s\S]*?maxIterations: 1/);
+    assert.doesNotMatch(prompt, /fill your context window/i);
+    assert.match(prompt, /one paid, non-resumable session/i);
+    assert.match(prompt, /Do not delegate exploration to subagents/i);
+    assert.match(prompt, /before your twelfth tool call/i);
+    assert.match(prompt, /Do not stop after analysis, a plan, or a progress update/i);
+  });
+
   it("keeps expected missing-ref probes out of operator output", () => {
     const moduleUrl = new URL("./main.mts", import.meta.url).href;
     const result = spawnSync(
@@ -307,6 +410,27 @@ describe("Sandcastle prompt wiring", () => {
       /git merge-base --is-ancestor \$\{targetHead\} HEAD/,
     );
     assert.match(prompt, /git merge \{\{TARGET_HEAD\}\} --no-edit/);
+  });
+
+  it("persists integration before publication and resumes it before planning", () => {
+    const source = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
+    const publish = source.match(
+      /async function integrateAndPublishGroup[\s\S]*?\n}\n\nasync function main/,
+    )?.[0];
+
+    assert.ok(publish);
+    assert.ok(
+      publish.indexOf('checkpoint: "integrated"') <
+        publish.indexOf("publishIntegrationBranch("),
+    );
+    assert.ok(
+      publish.indexOf("persistRunState();") <
+        publish.indexOf("publishIntegrationBranch("),
+    );
+    assert.match(
+      source,
+      /const recoveredIssues = recoverInterruptedRun\(\);[\s\S]*?integrateAndPublishGroup\([\s\S]*?for \(let round = 1;/,
+    );
   });
 
   it("requires the repository default branch as the PR base", () => {
