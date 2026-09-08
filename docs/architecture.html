@@ -982,7 +982,10 @@
           <p class="section-intro">
             The host process owns tracker and publication writes. Agents work in
             Docker sandboxes and only produce commits plus validated output.
-            Independent Tasks can run concurrently, up to three at a time.
+            Independent Tasks can run concurrently, up to three at a time. The
+            integration agent merges the run's pinned <code>main</code> commit
+            before reviewed Task commits, keeping long-lived Feature branches
+            current without rewriting their published history.
           </p>
           <div class="diagram">
             <svg
@@ -1139,7 +1142,7 @@
                 Integration sandbox
               </text>
               <text class="svg-copy" x="775" y="297" text-anchor="middle">
-                merge reviewed Tasks
+                merge pinned main + reviewed Tasks
               </text>
               <text class="svg-label" x="775" y="316" text-anchor="middle">
                 sandcastle/feature-{Feature}

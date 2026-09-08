@@ -70,7 +70,9 @@ its dependency-ready Tasks. It runs up to three independent Tasks at once on
 Task-local branches, integrates them into one Feature branch, and opens or
 updates a draft Feature pull request into `main`. Sandcastle must run from a
 clean, remote-matched `main` checkout. A Task closes only after that remote
-branch and pull request are verified.
+branch and pull request are verified. Before merging reviewed Tasks, the
+integration phase merges the run's pinned `main` commit so a long-lived Feature
+branch remains current across rounds.
 
 Install the repository dependencies and create the local AFK configuration:
 
