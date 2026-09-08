@@ -253,7 +253,7 @@ class JwtAccessTokenVerifier:
                 audience=self._audience,
                 issuer=self._issuer,
                 options={
-                    "require": ["iss", "sub", "aud", "exp", "nbf", "scope"],
+                    "require": ["iss", "sub", "aud", "exp", "nbf"],
                     "strict_aud": True,
                 },
             )
@@ -264,10 +264,12 @@ class JwtAccessTokenVerifier:
             raise AccessTokenVerificationError
 
         subject = claims["sub"]
-        scope_claim = claims["scope"]
+        scope_claim = claims.get("scope", claims.get("scp"))
         if not isinstance(subject, str) or not subject:
             raise AccessTokenVerificationError
         if not isinstance(scope_claim, str):
+            raise AccessTokenVerificationError
+        if "scope" in claims and "scp" in claims:
             raise AccessTokenVerificationError
         scopes = frozenset(scope_claim.split())
         if self._required_scope not in scopes:

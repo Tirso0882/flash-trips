@@ -10,7 +10,7 @@
     "test:sandcastle": "node --import tsx --test .sandcastle/main.test.mts",
     "traceability": "node scripts/traceability.mjs",
     "test:traceability": "node --test tests/traceability/traceability.test.mjs",
-    "test:web-boundaries": "node --conditions=react-server --import ./tests/node/deny-network.mjs --import tsx --test tests/web/boundaries.test.mjs tests/web/session.test.mts"
+    "test:web-boundaries": "node --conditions=react-server --import ./tests/node/deny-network.mjs --import tsx --test tests/web/boundaries.test.mjs tests/web/oidc.test.mts tests/web/session.test.mts"
   },
   "engines": {
     "node": ">=22"

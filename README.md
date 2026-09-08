@@ -80,6 +80,15 @@ The first protects opaque session identifiers stored in PostgreSQL, and the
 second encrypts the exact-audience access token retained by the BFF. The values
 in `.env.example` are local-only and must be replaced outside local development.
 
+Google sign-in uses `GET /api/auth/sign-in` and the exact
+`FLASH_TRIPS_OIDC_REDIRECT_URI` callback. Configure the six
+`FLASH_TRIPS_OIDC_*` names in `.env.example` from one Entra External ID
+registration. The issuer must exactly match the tenant discovery document.
+Localhost callbacks may use HTTP, but must use a dedicated development
+registration. Hosted callbacks require HTTPS, and production rejects localhost.
+The client secret and provider tokens are server-only. Never add their values
+to `.env.example`, browser code, CI fixtures, logs, or evidence.
+
 Identity tests under `tests/identity/` mint tokens with an in-process issuer
 that serves its JWKS on a loopback listener. Apart from that listener and the
 PostgreSQL persistence tests, every test runs with sockets disabled.

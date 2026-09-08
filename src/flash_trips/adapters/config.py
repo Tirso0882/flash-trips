@@ -1,4 +1,5 @@
 from typing import Literal, Self
+from uuid import UUID
 
 from pydantic import (
     BaseModel,
@@ -65,6 +66,10 @@ class RuntimeSettings(BaseSettings):
         max_length=1,
     )
     live_call_allowance: Literal[0] = 0
+    flash_trips_oidc_client_id: str | None = None
+    flash_trips_oidc_issuer: str | None = None
+    flash_trips_oidc_tenant_id: str | None = None
+    flash_trips_oidc_tenant_subdomain: str | None = None
 
     @field_validator("live_call_allowance", mode="before")
     @classmethod
@@ -79,7 +84,38 @@ class RuntimeSettings(BaseSettings):
     def require_postgres_asyncpg(self) -> Self:
         if not self.database_url.get_secret_value().startswith("postgresql+asyncpg://"):
             raise ValueError("DATABASE_URL must use PostgreSQL with asyncpg")
+        oidc_values = (
+            self.flash_trips_oidc_client_id,
+            self.flash_trips_oidc_issuer,
+            self.flash_trips_oidc_tenant_id,
+            self.flash_trips_oidc_tenant_subdomain,
+        )
+        if any(value is not None for value in oidc_values):
+            if any(value is None or not value.strip() for value in oidc_values):
+                raise ValueError("OIDC verifier configuration must be complete")
+            tenant_id_value = self.flash_trips_oidc_tenant_id
+            subdomain = self.flash_trips_oidc_tenant_subdomain
+            issuer = self.flash_trips_oidc_issuer
+            if tenant_id_value is None or subdomain is None or issuer is None:
+                raise ValueError("OIDC verifier configuration must be complete")
+            tenant_id = str(UUID(tenant_id_value))
+            if issuer != f"https://{subdomain}.ciamlogin.com/{tenant_id}/v2.0":
+                raise ValueError("OIDC issuer must be the exact external tenant issuer")
         return self
+
+    @property
+    def oidc_is_configured(self) -> bool:
+        return self.flash_trips_oidc_issuer is not None
+
+    @property
+    def oidc_jwks_uri(self) -> str:
+        if self.flash_trips_oidc_tenant_subdomain is None:
+            raise ValueError("OIDC verifier is not configured")
+        subdomain = self.flash_trips_oidc_tenant_subdomain
+        return (
+            f"https://{subdomain}.ciamlogin.com/"
+            f"{subdomain}.onmicrosoft.com/discovery/v2.0/keys"
+        )
 
     @classmethod
     def from_environment(cls) -> Self:

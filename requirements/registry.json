@@ -78,6 +78,10 @@
       "location": "docs/adr/0019-stage-security-controls-by-pilot-cohort.md"
     },
     {
+      "id": "ADR-0020-SOURCE",
+      "location": "docs/adr/0020-propose-entra-external-id-for-pilot-authentication.md"
+    },
+    {
       "id": "ISSUE-115",
       "location": "https://github.com/Tirso0882/flash-trips/issues/115"
     },
@@ -346,6 +350,10 @@
     {
       "id": "ADR-0019",
       "source": "ADR-0019-SOURCE"
+    },
+    {
+      "id": "ADR-0020",
+      "source": "ADR-0020-SOURCE"
     },
     {
       "id": "E-ACCEPTANCE",
@@ -3168,6 +3176,19 @@
         {
           "disposition": "decision_record",
           "owner": "ADR-0019"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "ADR-0020",
+      "kind": "adr",
+      "text": "Propose Entra External ID for pilot authentication",
+      "source": "ADR-0020-SOURCE",
+      "ownership": [
+        {
+          "disposition": "decision_record",
+          "owner": "ADR-0020"
         }
       ],
       "references": []

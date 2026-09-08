@@ -14,7 +14,10 @@ from flash_trips.adapters.http.problems import (
     unhandled_problem,
 )
 from flash_trips.adapters.http.status import status_router
-from flash_trips.adapters.identity import RejectingAccessTokenVerifier
+from flash_trips.adapters.identity import (
+    JwtAccessTokenVerifier,
+    RejectingAccessTokenVerifier,
+)
 from flash_trips.adapters.postgres import (
     PostgresDatabase,
     PostgresExternalIdentityRepositoryFactory,
@@ -90,7 +93,24 @@ def create_runtime_app() -> FastAPI:
             subject=entry.subject.get_secret_value(),
         ),
     )
-    return create_app(planner_resolver=resolver, database=database)
+    verifier: AccessTokenVerifier = RejectingAccessTokenVerifier()
+    if settings.oidc_is_configured:
+        issuer = settings.flash_trips_oidc_issuer
+        audience = settings.flash_trips_oidc_client_id
+        if issuer is None or audience is None:
+            raise ValueError("OIDC verifier configuration must be complete")
+        verifier = JwtAccessTokenVerifier(
+            issuer=issuer,
+            audience=audience,
+            jwks_uri=settings.oidc_jwks_uri,
+            allowed_algorithms=("RS256",),
+            required_scope="principal:read",
+        )
+    return create_app(
+        access_token_verifier=verifier,
+        planner_resolver=resolver,
+        database=database,
+    )
 
 
 __all__ = ["create_app", "create_runtime_app"]

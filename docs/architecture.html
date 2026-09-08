@@ -679,6 +679,8 @@
                 Web-to-API service status, FastAPI request IDs and typed
                 problems, provider-neutral authenticated-principal handling,
                 exact External Identity lookup with active-Planner enforcement,
+                Google OIDC Authorization Code with PKCE BFF routes, opaque
+                revocable application sessions,
                 generated contracts, container smoke tests, CI, and Azure
                 delivery.
               </p>
@@ -700,10 +702,12 @@
                 nor a failing issuer can refetch faster than that refresh
                 interval. These boundaries are proven
                 against the deterministic TLS local issuer in
-                <code>tests/identity/</code>. No runtime setting supplies the
-                provider values yet, so <code>create_app</code> still composes
-                the fail-closed <code>RejectingAccessTokenVerifier</code> until
-                the live provider lands.
+                <code>tests/identity/</code>. When the complete Entra
+                environment is present, <code>create_runtime_app</code>
+                composes this verifier with the exact tenant issuer, client
+                audience, and tenant JWKS. Missing provider configuration
+                retains the fail-closed
+                <code>RejectingAccessTokenVerifier</code>.
               </p>
               <p>
                 The PostgreSQL adapter implements the principal-scoped Planner
@@ -711,9 +715,8 @@
                 issuer and subject pair from
                 <code>external_identities</code> to an active Planner. The
                 runtime composition validates the configured single-entry
-                allowlist and connects that resolver to the protected route,
-                but the default token verifier still rejects every token until
-                provider settings land. The linear, reversible Alembic history
+                allowlist and connects that resolver to the protected route.
+                The linear, reversible Alembic history
                 also creates <code>application_sessions</code>, which stores
                 only a keyed digest of each opaque browser identifier and an
                 encrypted exact-audience access token. The BFF session manager
@@ -724,11 +727,12 @@
                 <code>apps/web/lib/server/session-runtime.ts</code> rather than
                 through FastAPI, so the web process needs
                 <code>DATABASE_URL</code> as well as the API base URL. The auth
-                session and sign-out routes use the shared cookie policy and
-                answer an unusable session with the same RFC 9457 problem shape
-                the API returns. The server-only issuance helper is ready for
-                the provider callback, which remains owned by the live PKCE
-                task. The JSON logger, Key Vault access, and
+                sign-in, callback, session, and sign-out routes use the shared
+                cookie policy. The callback validates an encrypted,
+                short-lived state, nonce, PKCE verifier, exact redirect, token
+                response, and signed ID token before creating the application
+                session. Provider tokens never enter the browser. The JSON
+                logger, Key Vault access, and
                 Application Insights resources are not connected.
               </p>
             </article>
