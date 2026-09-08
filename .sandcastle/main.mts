@@ -28,6 +28,7 @@ import { randomUUID } from "node:crypto";
 import {
   closeSync,
   existsSync,
+  fsyncSync,
   openSync,
   readFileSync,
   renameSync,
@@ -175,15 +176,25 @@ type PublicationReceipt = {
   prUrl: string;
   draft: boolean;
 };
+const runCheckpointSchema = z.enum([
+  "claimed",
+  "reviewed",
+  "integrated",
+  "published",
+]);
+type RunCheckpoint = z.infer<typeof runCheckpointSchema>;
 type ActiveClaim = PlannedIssue & {
   parent: number | null;
   parentTitle: string | null;
   integrationBranch: string;
+  checkpoint: RunCheckpoint;
   approvedSha?: string;
+  integrationHead?: string;
+  expectedRemoteTree?: string;
   publication?: PublicationReceipt;
 };
 type ClaimedIssue = ActiveClaim & { taskEnvironment: Record<string, string> };
-type ApprovedIssue = { issue: ClaimedIssue; sha: string };
+type ApprovedIssue = { issue: ActiveClaim; sha: string };
 
 const publicationReceiptSchema = z.object({
   branch: z.string().min(1),
@@ -196,7 +207,7 @@ const publicationReceiptSchema = z.object({
   draft: z.boolean(),
 });
 
-const runStateSchema = z.object({
+export const runStateSchema = z.object({
   targetBranch: z.string().min(1),
   targetHead: z.string().regex(/^[0-9a-f]{40}$/),
   issues: z.array(
@@ -210,24 +221,72 @@ const runStateSchema = z.object({
         .string()
         .regex(/^sandcastle\/(?:feature|task)-[1-9]\d*$/)
         .optional(),
+      checkpoint: runCheckpointSchema.optional(),
       approvedSha: z
+        .string()
+        .regex(/^[0-9a-f]{40}$/)
+        .optional(),
+      integrationHead: z
+        .string()
+        .regex(/^[0-9a-f]{40}$/)
+        .optional(),
+      expectedRemoteTree: z
         .string()
         .regex(/^[0-9a-f]{40}$/)
         .optional(),
       publication: publicationReceiptSchema.optional(),
     }),
   ),
-}).transform((state) => ({
-  ...state,
-  issues: state.issues.map((issue) => ({
-    ...issue,
-    integrationBranch:
-      issue.integrationBranch ??
-      (issue.parent === null
-        ? issue.branch
-        : `sandcastle/feature-${issue.parent}`),
-  })),
-}));
+})
+  .transform((state) => ({
+    ...state,
+    issues: state.issues.map((issue) => ({
+      ...issue,
+      integrationBranch:
+        issue.integrationBranch ??
+        (issue.parent === null
+          ? issue.branch
+          : `sandcastle/feature-${issue.parent}`),
+      checkpoint:
+        issue.checkpoint ??
+        (issue.publication
+          ? "published"
+          : issue.integrationHead
+            ? "integrated"
+            : issue.approvedSha
+              ? "reviewed"
+              : "claimed"),
+    })),
+  }))
+  .superRefine((state, context) => {
+    for (const [index, issue] of state.issues.entries()) {
+      if (issue.checkpoint !== "claimed" && !issue.approvedSha) {
+        context.addIssue({
+          code: "custom",
+          message: `${issue.checkpoint} checkpoint requires an approved commit`,
+          path: ["issues", index, "approvedSha"],
+        });
+      }
+      if (
+        issue.checkpoint === "integrated" &&
+        (!issue.integrationHead || !issue.expectedRemoteTree)
+      ) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "integrated checkpoint requires its source commit and expected remote tree",
+          path: ["issues", index, "integrationHead"],
+        });
+      }
+      if (issue.checkpoint === "published" && !issue.publication) {
+        context.addIssue({
+          code: "custom",
+          message: "published checkpoint requires a publication receipt",
+          path: ["issues", index, "publication"],
+        });
+      }
+    }
+  });
 
 const reviewSchema = z.object({
   verdict: z.enum(["approved", "blocked"]),
@@ -1010,6 +1069,7 @@ function claimIssue(planned: PlannedIssue): ClaimedIssue | undefined {
       issue.parent === null
         ? planned.branch
         : `sandcastle/feature-${issue.parent}`,
+    checkpoint: "claimed",
     taskEnvironment,
   };
 }
@@ -1090,7 +1150,7 @@ function localBranchHead(branch: string): string | undefined {
 }
 
 function prepareIntegrationBase(
-  issue: ClaimedIssue,
+  issue: ActiveClaim,
   targetHead: string,
 ): string {
   if (issue.parent === null) return targetHead;
@@ -1123,7 +1183,7 @@ function updateIntegrationBranch(
 }
 
 function publishIntegrationBranch(
-  issue: ClaimedIssue,
+  issue: ActiveClaim,
   sourceHead: string,
   targetBranch: string,
   expectedRemoteTree: string,
@@ -1269,20 +1329,30 @@ function persistRunState(): void {
   }
 
   const temporaryPath = `${RUN_STATE_PATH}.tmp`;
-  writeFileSync(
-    temporaryPath,
-    `${JSON.stringify(
-      {
-        targetBranch: runStateTargetBranch,
-        targetHead: runStateTargetHead,
-        issues: [...activeClaims.values()],
-      },
-      null,
-      2,
-    )}\n`,
-    { flag: "w" },
-  );
+  const contents = `${JSON.stringify(
+    {
+      targetBranch: runStateTargetBranch,
+      targetHead: runStateTargetHead,
+      issues: [...activeClaims.values()],
+    },
+    null,
+    2,
+  )}\n`;
+  const descriptor = openSync(temporaryPath, "w");
+  try {
+    writeFileSync(descriptor, contents);
+    fsyncSync(descriptor);
+  } finally {
+    closeSync(descriptor);
+  }
   renameSync(temporaryPath, RUN_STATE_PATH);
+
+  const directory = openSync(".sandcastle", "r");
+  try {
+    fsyncSync(directory);
+  } finally {
+    closeSync(directory);
+  }
 }
 
 function blockIssue(issue: PlannedIssue, reason: string): void {
@@ -1301,6 +1371,17 @@ function blockIssue(issue: PlannedIssue, reason: string): void {
     activeClaims.delete(issue.id);
     persistRunState();
   }
+}
+
+function stopClaim(issue: ActiveClaim, reason: string): void {
+  if (issue.checkpoint === "claimed") {
+    blockIssue(issue, reason);
+    return;
+  }
+  console.warn(
+    `  ↻ Preserved #${issue.id} at its ${issue.checkpoint} checkpoint for the next run.`,
+  );
+  persistRunState();
 }
 
 function closeLandedIssue(
@@ -1344,17 +1425,24 @@ function closeLandedIssue(
   return true;
 }
 
-function recoverInterruptedRun(): void {
-  if (!existsSync(RUN_STATE_PATH)) return;
+function recoverInterruptedRun(): ApprovedIssue[] {
+  if (!existsSync(RUN_STATE_PATH)) return [];
 
   const state = runStateSchema.parse(
     JSON.parse(readFileSync(RUN_STATE_PATH, "utf8")),
   );
+  if (state.targetBranch !== runStateTargetBranch) {
+    throw new Error(
+      `The interrupted run targeted ${state.targetBranch}, not ${runStateTargetBranch}.`,
+    );
+  }
   console.warn(
     `Recovering ${state.issues.length} claim(s) from an interrupted Sandcastle run.`,
   );
 
-  const unresolved: ActiveClaim[] = [];
+  for (const issue of state.issues) activeClaims.set(issue.id, issue);
+
+  let recoveryFailed = false;
   for (const issue of state.issues) {
     let current: z.infer<typeof recoveryIssueSchema>;
     try {
@@ -1377,7 +1465,7 @@ function recoverInterruptedRun(): void {
       console.warn(
         `  ! Could not recover #${issue.id}: ${describeError(error)}`,
       );
-      unresolved.push(issue);
+      recoveryFailed = true;
       continue;
     }
 
@@ -1386,19 +1474,60 @@ function recoverInterruptedRun(): void {
         console.error(
           `  ! Closed Task #${issue.id} has no valid publication receipt.`,
         );
-        unresolved.push(issue);
+        recoveryFailed = true;
         continue;
       }
-      if (!setPipelineLabel(issue.id, null)) unresolved.push(issue);
+      if (!setPipelineLabel(issue.id, null)) {
+        recoveryFailed = true;
+      } else {
+        activeClaims.delete(issue.id);
+      }
       continue;
     }
-    if (!current.labels.includes("agent:in-progress")) continue;
+    if (!current.labels.includes("agent:in-progress")) {
+      activeClaims.delete(issue.id);
+      continue;
+    }
 
     if (
       issue.approvedSha &&
       issue.publication &&
       closeLandedIssue(issue, issue.approvedSha, issue.publication)
     ) {
+      continue;
+    }
+
+    if (
+      issue.approvedSha &&
+      issue.checkpoint !== "claimed" &&
+      branchLanded(issue.approvedSha, issue.branch)
+    ) {
+      if (
+        issue.checkpoint === "integrated" ||
+        issue.checkpoint === "published"
+      ) {
+        if (
+          !issue.integrationHead ||
+          !issue.expectedRemoteTree ||
+          !branchLanded(issue.approvedSha, issue.integrationHead)
+        ) {
+          console.error(
+            `  ! The integration checkpoint for #${issue.id} is not locally verifiable.`,
+          );
+          recoveryFailed = true;
+          continue;
+        }
+      }
+      if (issue.checkpoint === "published") {
+        activeClaims.set(issue.id, {
+          ...issue,
+          checkpoint: "integrated",
+          publication: undefined,
+        });
+      }
+      console.warn(
+        `  ↻ Resuming #${issue.id} from its ${activeClaims.get(issue.id)!.checkpoint} checkpoint.`,
+      );
       continue;
     }
 
@@ -1410,24 +1539,20 @@ function recoverInterruptedRun(): void {
       `The previous Sandcastle process stopped while working on \`${issue.branch}\`. The branch and any dirty worktree were preserved for inspection. Requeue the issue after deciding whether to keep that work.`,
     );
     if (!setPipelineLabel(issue.id, "agent:blocked")) {
-      unresolved.push(issue);
+      recoveryFailed = true;
     } else {
+      activeClaims.delete(issue.id);
       runHadBlockedWork = true;
     }
   }
 
-  if (unresolved.length === 0) {
-    rmSync(RUN_STATE_PATH, { force: true });
-    return;
+  persistRunState();
+  if (recoveryFailed) {
+    throw new Error("Could not safely recover every claim from the previous run.");
   }
-
-  writeFileSync(
-    RUN_STATE_PATH,
-    `${JSON.stringify({ ...state, issues: unresolved }, null, 2)}\n`,
-  );
-  throw new Error(
-    `Could not recover ${unresolved.length} claim(s) from the previous run.`,
-  );
+  return [...activeClaims.values()]
+    .filter((issue) => issue.approvedSha !== undefined)
+    .map((issue) => ({ issue, sha: issue.approvedSha! }));
 }
 
 function assertTargetStable(targetBranch: string, expectedHead: string): void {
@@ -1766,10 +1891,121 @@ async function buildIntegrationBranch(
   }
 }
 
+async function integrateAndPublishGroup(
+  group: ApprovedIssue[],
+  baseHead: string,
+  targetBranch: string,
+  targetHead: string,
+  round: number,
+): Promise<void> {
+  group.sort((left, right) => Number(left.issue.id) - Number(right.issue.id));
+  let temporaryIntegration: { branch: string; head: string } | undefined;
+
+  try {
+    assertTargetStable(targetBranch, targetHead);
+    const resumable = group.every(
+      ({ issue }) =>
+        issue.checkpoint === "integrated" &&
+        issue.integrationHead === group[0]!.issue.integrationHead &&
+        issue.expectedRemoteTree === group[0]!.issue.expectedRemoteTree,
+    );
+
+    let publishedHead: string;
+    let expectedRemoteTree: string;
+    if (resumable) {
+      publishedHead = group[0]!.issue.integrationHead!;
+      expectedRemoteTree = group[0]!.issue.expectedRemoteTree!;
+    } else {
+      expectedRemoteTree = capture("git", [
+        "rev-parse",
+        `${baseHead}^{tree}`,
+      ]);
+      if (group.length === 1 && group[0]!.issue.parent === null) {
+        publishedHead = group[0]!.sha;
+      } else {
+        temporaryIntegration = await buildIntegrationBranch(
+          group,
+          baseHead,
+          targetHead,
+          round,
+        );
+        updateIntegrationBranch(
+          group[0]!.issue.integrationBranch,
+          baseHead,
+          temporaryIntegration.head,
+        );
+        publishedHead = temporaryIntegration.head;
+      }
+
+      for (const { issue, sha } of group) {
+        const active = activeClaims.get(issue.id);
+        if (active) {
+          activeClaims.set(issue.id, {
+            ...active,
+            checkpoint: "integrated",
+            approvedSha: sha,
+            integrationHead: publishedHead,
+            expectedRemoteTree,
+          });
+        }
+      }
+      persistRunState();
+    }
+
+    const parent = group[0]!.issue.parent;
+    const ready =
+      parent === null ||
+      !featureHasRemainingAgentTasks(
+        parent,
+        new Set(group.map(({ issue }) => issue.id)),
+      );
+    const receipt = publishIntegrationBranch(
+      group[0]!.issue,
+      publishedHead,
+      targetBranch,
+      expectedRemoteTree,
+      ready,
+    );
+
+    for (const { issue, sha } of group) {
+      const active = activeClaims.get(issue.id);
+      if (active) {
+        activeClaims.set(issue.id, {
+          ...active,
+          checkpoint: "published",
+          approvedSha: sha,
+          integrationHead: publishedHead,
+          expectedRemoteTree,
+          publication: receipt,
+        });
+      }
+    }
+    persistRunState();
+
+    for (const { issue, sha } of group) {
+      const active = activeClaims.get(issue.id);
+      if (!active || !closeLandedIssue(active, sha, receipt)) {
+        blockIssue(
+          issue,
+          `The reviewed commit ${sha} was not proven on the published Feature branch.`,
+        );
+      }
+    }
+    console.log(
+      `Published ${group[0]!.issue.integrationBranch} in ${receipt.prUrl}; closed ${group.length} Task(s).`,
+    );
+  } finally {
+    if (temporaryIntegration) {
+      deleteBranchIfMerged(
+        temporaryIntegration.branch,
+        group[0]!.issue.integrationBranch,
+      );
+    }
+  }
+}
+
 async function main(): Promise<void> {
   runPreflight();
-  shutdownController.signal.throwIfAborted();
-  recoverInterruptedRun();
   shutdownController.signal.throwIfAborted();
 
   // Preflight proves that the checked-out branch is the repository default.
@@ -1779,6 +2015,38 @@ async function main(): Promise<void> {
   assertRemoteBaseMatches(targetBranch, expectedTargetHead);
   runStateTargetBranch = targetBranch;
   runStateTargetHead = expectedTargetHead;
+  const recoveredIssues = recoverInterruptedRun();
+  shutdownController.signal.throwIfAborted();
+
+  if (recoveredIssues.length > 0) {
+    const recoveredGroups = new Map<string, ApprovedIssue[]>();
+    for (const approved of recoveredIssues) {
+      const group =
+        recoveredGroups.get(approved.issue.integrationBranch) ?? [];
+      group.push(approved);
+      recoveredGroups.set(approved.issue.integrationBranch, group);
+    }
+    for (const group of recoveredGroups.values()) {
+      const baseHead =
+        group[0]!.issue.checkpoint === "integrated"
+          ? group[0]!.issue.integrationHead!
+          : prepareIntegrationBase(group[0]!.issue, expectedTargetHead);
+      try {
+        await integrateAndPublishGroup(
+          group,
+          baseHead,
+          targetBranch,
+          expectedTargetHead,
+          0,
+        );
+      } catch (error) {
+        throw new Error(
+          `Could not resume ${group[0]!.issue.integrationBranch} from its durable checkpoint: ${describeError(error)}`,
+        );
+      }
+    }
+  }
+
   let claimedTaskCount = 0;
 
   for (let round = 1; claimedTaskCount < TASK_BUDGET; round++) {
@@ -1948,8 +2216,13 @@ async function main(): Promise<void> {
         throw new Error(`Could not pin the reviewed commit for #${issue.id}.`);
       }
       const { taskEnvironment: _taskEnvironment, ...persistable } = issue;
-      activeClaims.set(issue.id, { ...persistable, approvedSha: sha });
-      return { issue, sha };
+      const reviewed = {
+        ...persistable,
+        checkpoint: "reviewed" as const,
+        approvedSha: sha,
+      };
+      activeClaims.set(issue.id, reviewed);
+      return { issue: reviewed, sha };
     });
     persistRunState();
 
@@ -1962,83 +2235,28 @@ async function main(): Promise<void> {
 
     // Phase 3: integrate and publish each Feature independently. Publication
     // is a hard gate for Task closure.
+    const publicationFailures: string[] = [];
     for (const [integrationBranch, group] of groups) {
-      group.sort((left, right) => Number(left.issue.id) - Number(right.issue.id));
       const baseHead = integrationBases.get(integrationBranch)!;
-      let integration: { branch: string; head: string } | undefined;
       try {
-        assertTargetStable(targetBranch, expectedTargetHead);
-        let publishedHead: string;
-        if (
-          group.length === 1 &&
-          group[0]!.issue.parent === null
-        ) {
-          publishedHead = group[0]!.sha;
-        } else {
-          integration = await buildIntegrationBranch(
-            group,
-            baseHead,
-            expectedTargetHead,
-            round,
-          );
-          updateIntegrationBranch(
-            integrationBranch,
-            baseHead,
-            integration.head,
-          );
-          publishedHead = integration.head;
-        }
-        const expectedRemoteTree = capture("git", [
-          "rev-parse",
-          `${baseHead}^{tree}`,
-        ]);
-        const parent = group[0]!.issue.parent;
-        const ready =
-          parent === null ||
-          !featureHasRemainingAgentTasks(
-            parent,
-            new Set(group.map(({ issue }) => issue.id)),
-          );
-        const receipt = publishIntegrationBranch(
-          group[0]!.issue,
-          publishedHead,
+        await integrateAndPublishGroup(
+          group,
+          baseHead,
           targetBranch,
-          expectedRemoteTree,
-          ready,
-        );
-
-        for (const { issue, sha } of group) {
-          const active = activeClaims.get(issue.id);
-          if (active) {
-            activeClaims.set(issue.id, {
-              ...active,
-              approvedSha: sha,
-              publication: receipt,
-            });
-          }
-        }
-        persistRunState();
-
-        for (const { issue, sha } of group) {
-          const active = activeClaims.get(issue.id);
-          if (!active || !closeLandedIssue(active, sha, receipt)) {
-            blockIssue(
-              issue,
-              `The reviewed commit ${sha} was not proven on the published Feature branch.`,
-            );
-          }
-        }
-        if (integration) {
-          deleteBranchIfMerged(integration.branch, integrationBranch);
-        }
-        console.log(
-          `Published ${integrationBranch} in ${receipt.prUrl}; closed ${group.length} Task(s).`,
+          expectedTargetHead,
+          round,
         );
       } catch (error) {
-        const reason = `Feature integration or publication failed: ${describeError(error)}. Reviewed Task branches were preserved.`;
+        const reason = `Feature integration or publication failed: ${describeError(error)}. Durable reviewed checkpoints were preserved.`;
         console.error(reason);
-        for (const { issue } of group) blockIssue(issue, reason);
+        publicationFailures.push(`${integrationBranch}: ${describeError(error)}`);
       }
+    }
+    if (publicationFailures.length > 0) {
+      persistRunState();
+      throw new Error(
+        `Publication stopped with resumable work: ${publicationFailures.join("; ")}`,
+      );
     }
   }
 
@@ -2060,7 +2278,7 @@ async function runSandcastle(): Promise<void> {
         new Error(`The orchestrator was interrupted by ${signal}.`),
       );
       for (const issue of activeClaims.values()) {
-        blockIssue(issue, `The orchestrator was interrupted by ${signal}.`);
+        stopClaim(issue, `The orchestrator was interrupted by ${signal}.`);
       }
     });
   }
@@ -2073,7 +2291,7 @@ async function runSandcastle(): Promise<void> {
   } finally {
     for (const issue of activeClaims.values()) {
       if (closedPendingCleanup.has(issue.id)) continue;
-      blockIssue(
+      stopClaim(
         issue,
         "The orchestrator stopped before it could finalize this issue.",
       );

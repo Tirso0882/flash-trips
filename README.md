@@ -123,6 +123,10 @@ preflight or orchestration failed, and `2` means one or more Tasks require
 attention. A clean run with no authorized Tasks exits without creating work.
 Use Ctrl-C to stop safely. The next run reads `.sandcastle/run-state.json`,
 reconciles interrupted claims, and preserves unfinished work for inspection.
+The state file records claimed, reviewed, integrated, and published
+checkpoints. If integration or publication fails after review, the next run
+continues from the latest verified checkpoint before planning new work. It does
+not rerun the paid implementer or reviewer.
 
 Set `SANDCASTLE_TASK_BUDGET` and `SANDCASTLE_TIME_BUDGET_MINUTES` in
 `.sandcastle/.env` to bound one AFK run. A Task with external pre-run gates
