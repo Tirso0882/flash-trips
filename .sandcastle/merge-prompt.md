@@ -1,3 +1,15 @@
+# TARGET UPDATE
+
+First merge the pinned target commit into the current Feature integration
+branch:
+
+`{{TARGET_HEAD}}`
+
+Run `git merge {{TARGET_HEAD}} --no-edit`. It is fine if Git reports that this
+commit is already an ancestor. If it conflicts, resolve it under the same rules
+as the reviewed Task commits below. This keeps a long-lived Feature branch
+current when the target branch advances between Sandcastle rounds.
+
 # TASK
 
 Merge the following reviewed Task commits into the current Feature integration

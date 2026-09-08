@@ -293,6 +293,22 @@ describe("Sandcastle prompt wiring", () => {
     );
   });
 
+  it("refreshes a long-lived Feature branch during integration", () => {
+    const source = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
+    const prompt = readFileSync(
+      new URL("./merge-prompt.md", import.meta.url),
+      "utf8",
+    );
+
+    assert.doesNotMatch(source, /does not descend from the pinned target/);
+    assert.match(source, /TARGET_HEAD:\s*targetHead/);
+    assert.match(
+      source,
+      /git merge-base --is-ancestor \$\{targetHead\} HEAD/,
+    );
+    assert.match(prompt, /git merge \{\{TARGET_HEAD\}\} --no-edit/);
+  });
+
   it("requires the repository default branch as the PR base", () => {
     const source = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
 
