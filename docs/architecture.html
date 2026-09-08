@@ -989,7 +989,10 @@
             <code>.sandcastle/run-state.json</code> durably records claimed,
             reviewed, integrated, and published checkpoints. Recovery resumes
             reviewed work at integration and retries publication from its
-            verified integration commit before planning new Tasks.
+            verified integration commit before planning new Tasks. Paid
+            implementers use one non-resumable session with a direct-execution
+            prompt. The default run limits are one concurrent Task, five Tasks,
+            and 120 minutes.
           </p>
           <div class="diagram">
             <svg
@@ -1089,7 +1092,7 @@
                 rx="8"
               />
               <text class="svg-title" x="960" y="84" text-anchor="middle">
-                Task pipelines, max 3
+                Task pipelines, hard max 3
               </text>
               <text class="svg-copy" x="960" y="106" text-anchor="middle">
                 sandcastle/task-{number}
@@ -1113,7 +1116,7 @@
                 test, code, verify, commit
               </text>
               <text class="svg-label" x="225" y="316" text-anchor="middle">
-                no tracker writes
+                one paid session, no retry
               </text>
 
               <rect
@@ -1272,6 +1275,7 @@
             claims, spending, branch publication, and pull-request updates.
             Remove it to stop new claims. An already claimed Task finishes.
             Interruptions before review still block the Task for inspection.
+            An empty implementer exit is not retried automatically.
             Reviewed and integrated checkpoints remain
             <code>agent:in-progress</code> so the next run can resume without
             paying for implementation or review again.
