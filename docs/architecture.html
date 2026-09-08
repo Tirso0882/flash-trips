@@ -1273,10 +1273,12 @@
         <section id="delivery">
           <h2>CI and Azure production</h2>
           <p class="section-intro">
-            Pull requests and main run three CI jobs. After successful main CI,
-            a release plan continues only when production image inputs changed.
-            Release and deployment use separate secretless GitHub OIDC
-            identities with narrow Azure roles.
+            Pull requests and main run three CI jobs. The required quality job
+            scans Git history for secrets before running the repository checks
+            and web build. After successful main CI, a release plan continues
+            only when production image inputs changed. Release and deployment
+            use separate secretless GitHub OIDC identities with narrow Azure
+            roles.
           </p>
           <div class="diagram">
             <svg
@@ -1337,7 +1339,7 @@
                 quality
               </text>
               <text class="svg-copy" x="330" y="91" text-anchor="middle">
-                just check + web build
+                secret scan + check/build
               </text>
               <rect
                 class="node"
