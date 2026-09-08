@@ -21,6 +21,11 @@ just migrate
 uv run pre-commit install
 ```
 
+The installed pre-commit hook runs Gitleaks against staged changes and blocks
+commits containing detected secrets. CI runs the same scanner against Git
+history in the required `quality` job. If Gitleaks reports a real credential,
+revoke and rotate it before removing it from the affected files or history.
+
 Run FastAPI and Next.js together with `just dev`. The Planner shell is at
 `http://localhost:3000/planner`, the Operator shell is at
 `http://localhost:3000/operator`, and the BFF status route is at
