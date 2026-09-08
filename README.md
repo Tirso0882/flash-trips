@@ -128,11 +128,22 @@ checkpoints. If integration or publication fails after review, the next run
 continues from the latest verified checkpoint before planning new work. It does
 not rerun the paid implementer or reviewer.
 
-Set `SANDCASTLE_TASK_BUDGET` and `SANDCASTLE_TIME_BUDGET_MINUTES` in
-`.sandcastle/.env` to bound one AFK run. A Task with external pre-run gates
-also needs `agent:gates-cleared`. If it declares an `## AFK environment`
-section, allowlist those variable names with `SANDCASTLE_TASK_ENV_ALLOWLIST`.
-Sandcastle passes only those configured values to that Task sandbox.
+The default spending envelope is one Task at a time, at most five Tasks, and
+at most 120 minutes per AFK run. Set `SANDCASTLE_MAX_PARALLEL_ISSUES`,
+`SANDCASTLE_TASK_BUDGET`, and `SANDCASTLE_TIME_BUDGET_MINUTES` in
+`.sandcastle/.env` to change those limits. Concurrency has a hard cap of three.
+Sandcastle prints the active limits before it claims any work.
+
+Each Cursor implementer gets one paid, non-resumable session. Its prompt starts
+from the ticket's named paths and tests, forbids delegated exploration, and
+requires an early test run or test edit. An implementer that still exits
+without a commit is blocked for inspection instead of receiving an automatic
+paid retry.
+
+A Task with external pre-run gates also needs `agent:gates-cleared`. If it
+declares an `## AFK environment` section, allowlist those variable names with
+`SANDCASTLE_TASK_ENV_ALLOWLIST`. Sandcastle passes only those configured values
+to that Task sandbox.
 
 When a Feature has no remaining agent Tasks, Sandcastle marks its pull request
 ready and enables squash auto-merge. GitHub merges only after the required

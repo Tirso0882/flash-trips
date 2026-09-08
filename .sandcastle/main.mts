@@ -46,10 +46,12 @@ import { z } from "zod";
 // Configuration
 // ---------------------------------------------------------------------------
 
-// Keep local Docker use bounded even when many unrelated tickets are queued.
-const MAX_PARALLEL_ISSUES = 3;
-const DEFAULT_TASK_BUDGET = 30;
-const DEFAULT_TIME_BUDGET_MINUTES = 8 * 60;
+// Keep paid AFK work conservative by default. Operators may opt into more
+// concurrency, but never beyond the local Docker safety cap.
+const HARD_MAX_PARALLEL_ISSUES = 3;
+export const DEFAULT_MAX_PARALLEL_ISSUES = 1;
+export const DEFAULT_TASK_BUDGET = 5;
+export const DEFAULT_TIME_BUDGET_MINUTES = 2 * 60;
 
 export function positiveIntegerSetting(
   name: string,
@@ -68,6 +70,11 @@ export function positiveIntegerSetting(
   return value;
 }
 
+const MAX_PARALLEL_ISSUES = positiveIntegerSetting(
+  "SANDCASTLE_MAX_PARALLEL_ISSUES",
+  DEFAULT_MAX_PARALLEL_ISSUES,
+  HARD_MAX_PARALLEL_ISSUES,
+);
 const TASK_BUDGET = positiveIntegerSetting(
   "SANDCASTLE_TASK_BUDGET",
   DEFAULT_TASK_BUDGET,
@@ -132,7 +139,7 @@ export const planSchema = z
           branch: z.string().regex(/^sandcastle\/task-[1-9]\d*$/),
         }),
       )
-      .max(MAX_PARALLEL_ISSUES),
+      .max(HARD_MAX_PARALLEL_ISSUES),
   })
   .superRefine(({ issues }, context) => {
     const ids = new Set<string>();
@@ -2007,6 +2014,9 @@ async function integrateAndPublishGroup(
 async function main(): Promise<void> {
   runPreflight();
   shutdownController.signal.throwIfAborted();
+  console.log(
+    `AFK limits: ${MAX_PARALLEL_ISSUES} concurrent, ${TASK_BUDGET} Tasks, ${TIME_BUDGET_MINUTES} minutes`,
+  );
 
   // Preflight proves that the checked-out branch is the repository default.
   // It remains the immutable PR base, and the local checkout never moves.
@@ -2112,7 +2122,7 @@ async function main(): Promise<void> {
 
     const plannedIssues = plan.output.issues.slice(
       0,
-      TASK_BUDGET - claimedTaskCount,
+      Math.min(MAX_PARALLEL_ISSUES, TASK_BUDGET - claimedTaskCount),
     );
     if (plannedIssues.length === 0) {
       console.log("No unblocked issues to work on. Exiting.");
