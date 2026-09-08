@@ -1,13 +1,13 @@
-# Propose Entra External ID for pilot authentication
+# Use Entra External ID for pilot authentication
 
-Status: Proposed, maintainer approval required
+Status: Accepted
 
 Date checked: 2026-09-08
 
-## Proposal
+## Decision
 
 Use Microsoft Entra External ID for the single-Planner pilot. Keep Auth0 as the
-provider-neutral fallback. This record does not approve the choice.
+provider-neutral fallback.
 
 The implementation depends only on OIDC discovery, Authorization Code with
 PKCE, JWT/JWKS verification, and the application-owned External Identity and
@@ -54,18 +54,36 @@ lists Free at USD 0 per month for up to 25,000 monthly active users, with
 passwordless authentication and unlimited social connections subject to its
 stated system limits. Either identity tier costs USD 0 at one Planner.
 
-The disposable tenant's actual subscription entitlement was not exposed by
-the supplied runtime credentials, so it is not claimed as verified. A
-maintainer must confirm the tenant is on the Entra External ID Basic
-entitlement and recheck both offers before approval.
+The supplied runtime credentials did not expose billing information. On
+2026-09-08, the maintainer instead confirmed through the Entra administrative
+surface that the disposable external tenant has a linked Azure subscription
+and no premium External ID add-ons. The maintainer also rechecked both
+published identity-tier prices. The Basic/core Entra tier and Auth0 Free tier
+therefore each cost USD 0 at the pilot's current scale.
 
-## Approval and disposal gate
+## Retention and telemetry
 
-Before approving this proposal, confirm the disposable tenant's current
-entitlement and recheck the published identity-tier prices. The development
-registration must remain separate from any hosted registration.
+The [official Entra retention documentation](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/reference-reports-data-retention)
+states that External ID Basic retains logs for seven days and requires Azure
+Monitor for longer retention. External tenants record audit, sign-in, and
+sign-up activity. The [official Auth0 retention table](https://auth0.com/docs/deploy-monitor/logs/log-data-retention)
+does not state a retention period for the Free plan. The
+[official Auth0 log documentation](https://auth0.com/docs/deploy-monitor/logs/pii-in-logs)
+states that authentication logs can contain personal data, including names,
+email addresses, phone numbers, IP addresses, and custom fields. It excludes
+access tokens, identity-provider tokens, private keys, and other core secrets,
+and records authorization codes only in partial form.
 
-The disposable registration and client secret are offered for explicit
-transfer to the maintainer only if this proposal is approved. Otherwise the
-tenant owner must delete the registration and secret after review. No supplied
-credential is committed to this repository.
+## Maintainer approval
+
+On 2026-09-08, the maintainer approved this decision after reviewing the live
+Google PKCE callback, deterministic failure coverage, session revocation, safe
+errors, secret redaction, current entitlement, pricing, retention, telemetry,
+and the final green pull-request checks.
+
+The maintainer accepted custody of the disposable Entra tenant, local
+development registration, client secret, Google OAuth client, and Google
+project so live sign-in can continue. The local registration is not used by a
+hosted environment. Any hosted environment requires a separate registration,
+client ID, secret, and exact redirect URI. No supplied credential is committed
+to this repository or provided to pull-request workflows.
