@@ -674,6 +674,7 @@
               <p>
                 Web-to-API service status, FastAPI request IDs and typed
                 problems, provider-neutral authenticated-principal handling,
+                exact External Identity lookup with active-Planner enforcement,
                 generated contracts, container smoke tests, CI, and Azure
                 delivery.
               </p>
@@ -702,10 +703,16 @@
               </p>
               <p>
                 The PostgreSQL adapter implements the principal-scoped Planner
-                repository and unit of work behind a reversible Alembic
-                migration, but it does not yet participate in a request flow.
-                Secure session policy constants, JSON logger, Key Vault access,
-                and Application Insights resources are also not connected.
+                repository and unit of work. It also resolves only an exact
+                issuer and subject pair from
+                <code>external_identities</code> to an active Planner. The
+                runtime composition validates the configured single-entry
+                allowlist and connects that resolver to the protected route,
+                but the default token verifier still rejects every token until
+                provider settings land. Both tables are managed by the linear,
+                reversible Alembic history. Secure session policy constants,
+                JSON logger, Key Vault access, and Application Insights
+                resources are also not connected.
               </p>
             </article>
             <article class="panel">
@@ -1003,7 +1010,10 @@
           <p class="section-intro">
             The host process owns tracker and publication writes. Agents work in
             Docker sandboxes and only produce commits plus validated output.
-            Independent Tasks can run concurrently, up to three at a time.
+            Independent Tasks can run concurrently, up to three at a time. The
+            integration agent merges the run's pinned <code>main</code> commit
+            before reviewed Task commits, keeping long-lived Feature branches
+            current without rewriting their published history.
           </p>
           <div class="diagram">
             <svg
@@ -1160,7 +1170,7 @@
                 Integration sandbox
               </text>
               <text class="svg-copy" x="775" y="297" text-anchor="middle">
-                merge reviewed Tasks
+                merge pinned main + reviewed Tasks
               </text>
               <text class="svg-label" x="775" y="316" text-anchor="middle">
                 sandcastle/feature-{Feature}
@@ -1291,10 +1301,12 @@
         <section id="delivery">
           <h2>CI and Azure production</h2>
           <p class="section-intro">
-            Pull requests and main run three CI jobs. After successful main CI,
-            a release plan continues only when production image inputs changed.
-            Release and deployment use separate secretless GitHub OIDC
-            identities with narrow Azure roles.
+            Pull requests and main run three CI jobs. The required quality job
+            scans Git history for secrets before running the repository checks
+            and web build. After successful main CI, a release plan continues
+            only when production image inputs changed. Release and deployment
+            use separate secretless GitHub OIDC identities with narrow Azure
+            roles.
           </p>
           <div class="diagram">
             <svg
@@ -1355,7 +1367,7 @@
                 quality
               </text>
               <text class="svg-copy" x="330" y="91" text-anchor="middle">
-                just check + web build
+                secret scan + check/build
               </text>
               <rect
                 class="node"

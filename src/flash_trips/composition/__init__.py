@@ -1,6 +1,10 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from starlette.exceptions import HTTPException
 
+from flash_trips.adapters.config import RuntimeSettings
 from flash_trips.adapters.http.openapi import install_problem_media_type
 from flash_trips.adapters.http.principal import principal_router
 from flash_trips.adapters.http.problems import (
@@ -11,18 +15,45 @@ from flash_trips.adapters.http.problems import (
 )
 from flash_trips.adapters.http.status import status_router
 from flash_trips.adapters.identity import RejectingAccessTokenVerifier
+from flash_trips.adapters.postgres import (
+    PostgresDatabase,
+    PostgresExternalIdentityRepositoryFactory,
+)
 from flash_trips.adapters.service_status import StaticServiceStatus
 from flash_trips.adapters.telemetry import configure_logging
-from flash_trips.application import AccessTokenVerifier, TripPlanning
+from flash_trips.application import (
+    AccessTokenVerifier,
+    AllowedExternalIdentity,
+    PlannerResolver,
+    RejectingPlannerResolver,
+    ResolvePlanner,
+    TripPlanning,
+)
 
 
-def create_app(access_token_verifier: AccessTokenVerifier | None = None) -> FastAPI:
+def create_app(
+    access_token_verifier: AccessTokenVerifier | None = None,
+    planner_resolver: PlannerResolver | None = None,
+    database: PostgresDatabase | None = None,
+) -> FastAPI:
     if access_token_verifier is None:
         access_token_verifier = RejectingAccessTokenVerifier()
+    if planner_resolver is None:
+        planner_resolver = RejectingPlannerResolver()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+        del app
+        try:
+            yield
+        finally:
+            if database is not None:
+                await database.close()
 
     app = FastAPI(
         title="Flash Trips API",
         version="1.0.0",
+        lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
         responses={
@@ -43,9 +74,23 @@ def create_app(access_token_verifier: AccessTokenVerifier | None = None) -> Fast
     app.add_exception_handler(HTTPException, http_problem)
     app.add_exception_handler(Exception, unhandled_problem)
     app.include_router(status_router(TripPlanning(StaticServiceStatus())))
-    app.include_router(principal_router(access_token_verifier))
+    app.include_router(principal_router(access_token_verifier, planner_resolver))
     install_problem_media_type(app)
     return app
 
 
-__all__ = ["create_app"]
+def create_runtime_app() -> FastAPI:
+    settings = RuntimeSettings.from_environment()
+    (entry,) = settings.external_identity_allowlist
+    database = PostgresDatabase(settings.database_url.get_secret_value())
+    resolver = ResolvePlanner(
+        PostgresExternalIdentityRepositoryFactory(database),
+        AllowedExternalIdentity(
+            issuer=entry.issuer,
+            subject=entry.subject.get_secret_value(),
+        ),
+    )
+    return create_app(planner_resolver=resolver, database=database)
+
+
+__all__ = ["create_app", "create_runtime_app"]

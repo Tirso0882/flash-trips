@@ -21,6 +21,11 @@ just migrate
 uv run pre-commit install
 ```
 
+The installed pre-commit hook runs Gitleaks against staged changes and blocks
+commits containing detected secrets. CI runs the same scanner against Git
+history in the required `quality` job. If Gitleaks reports a real credential,
+revoke and rotate it before removing it from the affected files or history.
+
 Run FastAPI and Next.js together with `just dev`. The Planner shell is at
 `http://localhost:3000/planner`, the Operator shell is at
 `http://localhost:3000/operator`, and the BFF status route is at
@@ -60,6 +65,11 @@ hand.
 Persistence tests use real PostgreSQL. They skip only when `DATABASE_URL` and
 `MIGRATION_DATABASE_URL` are absent. CI and `.env.example` provide both values.
 
+`EXTERNAL_IDENTITY_ALLOWLIST` must be a JSON array containing exactly one
+`issuer` and `subject` pair. Startup rejects an empty or multi-entry array. The
+pair must also have an exact row in `external_identities` linked to an active
+Planner before the protected route grants access.
+
 Identity tests under `tests/identity/` mint tokens with an in-process issuer
 that serves its JWKS on a loopback listener. Apart from that listener and the
 PostgreSQL persistence tests, every test runs with sockets disabled.
@@ -74,7 +84,9 @@ its dependency-ready Tasks. It runs up to three independent Tasks at once on
 Task-local branches, integrates them into one Feature branch, and opens or
 updates a draft Feature pull request into `main`. Sandcastle must run from a
 clean, remote-matched `main` checkout. A Task closes only after that remote
-branch and pull request are verified.
+branch and pull request are verified. Before merging reviewed Tasks, the
+integration phase merges the run's pinned `main` commit so a long-lived Feature
+branch remains current across rounds.
 
 Install the repository dependencies and create the local AFK configuration:
 

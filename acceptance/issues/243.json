@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "issue": 243,
+  "title": "Resolve External Identities by exact issuer and subject",
+  "outcome": "Resolved only the configured exact External Identity to an active Planner and failed closed for every other identity or access status.",
+  "checks": [
+    {
+      "name": "external identity HTTP and persistence contract",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/contract/test_http_principal.py",
+        "tests/contract/test_runtime_settings.py",
+        "tests/identity/test_access_tokens.py",
+        "tests/persistence/test_planner_persistence.py"
+      ]
+    }
+  ]
+}

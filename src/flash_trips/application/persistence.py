@@ -1,7 +1,14 @@
 from dataclasses import dataclass
+from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
+
+
+class PlannerAccessStatus(StrEnum):
+    ACTIVE = "Active"
+    SUSPENDED = "Suspended"
+    CLOSED = "Closed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +23,7 @@ class PlannerRecord:
     """The stable application-owned identity of a Planner."""
 
     id: UUID
+    access_status: PlannerAccessStatus = PlannerAccessStatus.ACTIVE
 
 
 class PlannerRepository(Protocol):

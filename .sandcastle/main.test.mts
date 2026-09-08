@@ -278,6 +278,37 @@ describe("Sandcastle prompt wiring", () => {
     );
   });
 
+  it("deletes a temporary branch only after checking the requested target", () => {
+    const source = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
+    const cleanup = source.match(
+      /function deleteBranchIfMerged[\s\S]*?\n}\n/,
+    )?.[0];
+
+    assert.ok(cleanup);
+    assert.match(cleanup, /branchLanded\(branch, targetBranch\)/);
+    assert.match(cleanup, /\["branch", "-D", branch\]/);
+    assert.ok(
+      cleanup.indexOf("branchLanded(branch, targetBranch)") <
+        cleanup.indexOf('["branch", "-D", branch]'),
+    );
+  });
+
+  it("refreshes a long-lived Feature branch during integration", () => {
+    const source = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
+    const prompt = readFileSync(
+      new URL("./merge-prompt.md", import.meta.url),
+      "utf8",
+    );
+
+    assert.doesNotMatch(source, /does not descend from the pinned target/);
+    assert.match(source, /TARGET_HEAD:\s*targetHead/);
+    assert.match(
+      source,
+      /git merge-base --is-ancestor \$\{targetHead\} HEAD/,
+    );
+    assert.match(prompt, /git merge \{\{TARGET_HEAD\}\} --no-edit/);
+  });
+
   it("requires the repository default branch as the PR base", () => {
     const source = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
 
@@ -289,7 +320,7 @@ describe("Sandcastle prompt wiring", () => {
     );
   });
 
-  it("lets Sandcastle supply its reserved target branch argument", () => {
+  it("uses Sandcastle's target branch without embedding the review diff", () => {
     const source = readFileSync(new URL("./main.mts", import.meta.url), "utf8");
     const prompt = readFileSync(
       new URL("./review-prompt.md", import.meta.url),
@@ -298,6 +329,11 @@ describe("Sandcastle prompt wiring", () => {
 
     assert.doesNotMatch(source, /\bTARGET_BRANCH\s*:/);
     assert.match(prompt, /\{\{TARGET_BRANCH\}\}/);
+    assert.doesNotMatch(prompt, /!`git diff/);
+    assert.match(
+      prompt,
+      /git diff --name-status \{\{TARGET_BRANCH\}\}\.\.\.HEAD/,
+    );
   });
 
   it("keeps GitHub tracker access on the host", () => {

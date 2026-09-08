@@ -6,8 +6,12 @@ from typing import Self
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 from flash_trips.application.persistence import PlannerPrincipal
+from flash_trips.kernel.authenticated_principal import AuthenticatedPrincipal
 
-from .repositories import PostgresPlannerRepository
+from .repositories import (
+    PostgresExternalIdentityRepository,
+    PostgresPlannerRepository,
+)
 
 
 class PostgresDatabase:
@@ -34,6 +38,19 @@ class PostgresUnitOfWorkFactory:
 
     def __call__(self, principal: PlannerPrincipal) -> "PostgresUnitOfWork":
         return PostgresUnitOfWork(self._database, principal)
+
+
+class PostgresExternalIdentityRepositoryFactory:
+    def __init__(self, database: PostgresDatabase) -> None:
+        self._database = database
+
+    def __call__(
+        self, principal: AuthenticatedPrincipal
+    ) -> PostgresExternalIdentityRepository:
+        return PostgresExternalIdentityRepository(
+            self._database.transaction,
+            principal,
+        )
 
 
 class PostgresUnitOfWork:

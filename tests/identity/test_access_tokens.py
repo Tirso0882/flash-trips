@@ -1,4 +1,6 @@
 import time
+from dataclasses import dataclass
+from uuid import UUID
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -6,8 +8,9 @@ from httpx import ASGITransport, AsyncClient
 
 from flash_trips.adapters.config import JwksFetchPolicy
 from flash_trips.adapters.identity import JwtAccessTokenVerifier
-from flash_trips.application import AccessTokenVerificationError
+from flash_trips.application import AccessTokenVerificationError, PlannerPrincipal
 from flash_trips.composition import create_app
+from flash_trips.kernel.authenticated_principal import AuthenticatedPrincipal
 
 from .local_issuer import LocalOidcIssuer
 
@@ -18,6 +21,20 @@ pytestmark = [
     pytest.mark.enable_socket,
     pytest.mark.allow_hosts(["127.0.0.1"]),
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class SingleIdentityResolver:
+    issuer: str
+    subject: str
+    planner_id: UUID
+
+    async def resolve(
+        self, principal: AuthenticatedPrincipal
+    ) -> PlannerPrincipal | None:
+        if principal.issuer != self.issuer or principal.subject != self.subject:
+            return None
+        return PlannerPrincipal(planner_id=self.planner_id)
 
 
 def _verifier_under_test(
@@ -51,6 +68,7 @@ def test_verifier_refuses_plaintext_jwks_retrieval() -> None:
 async def test_signed_access_token_establishes_the_endpoint_principal(
     local_oidc_issuer: LocalOidcIssuer,
 ) -> None:
+    planner_id = UUID("01991e28-1d65-7000-8000-000000000001")
     token = local_oidc_issuer.mint(
         {
             "sub": "signed-token-subject",
@@ -60,7 +78,14 @@ async def test_signed_access_token_establishes_the_endpoint_principal(
             "scope": "trips:read principal:read",
         }
     )
-    app = create_app(access_token_verifier=_verifier_under_test(local_oidc_issuer))
+    app = create_app(
+        access_token_verifier=_verifier_under_test(local_oidc_issuer),
+        planner_resolver=SingleIdentityResolver(
+            issuer=local_oidc_issuer.issuer,
+            subject="signed-token-subject",
+            planner_id=planner_id,
+        ),
+    )
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -78,11 +103,37 @@ async def test_signed_access_token_establishes_the_endpoint_principal(
         )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "issuer": local_oidc_issuer.issuer,
-        "subject": "signed-token-subject",
-        "scopes": ["principal:read", "trips:read"],
-    }
+    assert response.json() == {"planner_id": str(planner_id)}
+
+
+@pytest.mark.asyncio
+async def test_matching_email_with_a_different_subject_cannot_resolve_planner(
+    local_oidc_issuer: LocalOidcIssuer,
+) -> None:
+    token = local_oidc_issuer.mint(
+        {
+            "sub": "different-subject",
+            "email": "known-planner@example.test",
+        }
+    )
+    app = create_app(
+        access_token_verifier=_verifier_under_test(local_oidc_issuer),
+        planner_resolver=SingleIdentityResolver(
+            issuer=local_oidc_issuer.issuer,
+            subject="known-subject",
+            planner_id=UUID("01991e28-1d65-7000-8000-000000000001"),
+        ),
+    )
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/authenticated-principal",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "authentication_required"
 
 
 @pytest.mark.asyncio

@@ -1099,9 +1099,11 @@ function prepareIntegrationBase(
     capture("git", ["branch", issue.integrationBranch, targetHead]);
     return targetHead;
   }
-  if (!branchLanded(targetHead, existing)) {
+  try {
+    capture("git", ["merge-base", existing, targetHead]);
+  } catch {
     throw new Error(
-      `${issue.integrationBranch} does not descend from the pinned target ${targetHead}.`,
+      `${issue.integrationBranch} does not share history with the pinned target ${targetHead}.`,
     );
   }
   return existing;
@@ -1625,7 +1627,9 @@ function temporaryBranch(phase: string, round: number): string {
 function deleteBranchIfMerged(branch: string, targetBranch: string): void {
   if (!branchLanded(branch, targetBranch)) return;
   try {
-    capture("git", ["branch", "-d", branch]);
+    // `git branch -d` checks merge ancestry against the current branch, not
+    // targetBranch. The explicit check above is the deletion safety gate.
+    capture("git", ["branch", "-D", branch]);
   } catch (error) {
     console.warn(
       `  ! Could not remove temporary branch ${branch}: ${describeError(error)}`,
@@ -1655,13 +1659,14 @@ async function withDeadline<T>(
 
 async function buildIntegrationBranch(
   approvedIssues: ApprovedIssue[],
-  expectedTargetHead: string,
+  featureHead: string,
+  targetHead: string,
   round: number,
 ): Promise<{ branch: string; head: string }> {
   const branch = temporaryBranch("integration", round);
   const sandbox = await sandcastle.createSandbox({
     branch,
-    baseBranch: expectedTargetHead,
+    baseBranch: featureHead,
     sandbox: docker({
       imageName: DOCKER_IMAGE,
       // Merge and verification need no tracker access.
@@ -1683,6 +1688,7 @@ async function buildIntegrationBranch(
       agent: sandcastle.cursor(agentModels.merger),
       promptFile: "./.sandcastle/merge-prompt.md",
       promptArgs: {
+        TARGET_HEAD: targetHead,
         BRANCHES: approvedIssues
           .map(({ issue, sha }) => `- \`${issue.branch}\` at commit \`${sha}\``)
           .join("\n"),
@@ -1694,6 +1700,15 @@ async function buildIntegrationBranch(
     if (!merge.completionSignal) {
       throw new Error(
         "The merger stopped without confirming that its verification passed.",
+      );
+    }
+
+    const targetAncestry = await sandbox.exec(
+      `git merge-base --is-ancestor ${targetHead} HEAD`,
+    );
+    if (targetAncestry.exitCode !== 0) {
+      throw new Error(
+        `The integration branch does not contain the pinned target ${targetHead}.`,
       );
     }
 
@@ -1960,7 +1975,12 @@ async function main(): Promise<void> {
         ) {
           publishedHead = group[0]!.sha;
         } else {
-          integration = await buildIntegrationBranch(group, baseHead, round);
+          integration = await buildIntegrationBranch(
+            group,
+            baseHead,
+            expectedTargetHead,
+            round,
+          );
           updateIntegrationBranch(
             integrationBranch,
             baseHead,

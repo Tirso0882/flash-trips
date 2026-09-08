@@ -5,21 +5,13 @@ export type ClientOptions = {
 };
 
 /**
- * AuthenticatedPrincipalResponse
+ * PlannerPrincipalResponse
  */
-export type AuthenticatedPrincipalResponse = {
+export type PlannerPrincipalResponse = {
     /**
-     * Issuer
+     * Planner Id
      */
-    issuer: string;
-    /**
-     * Scopes
-     */
-    scopes: Array<string>;
-    /**
-     * Subject
-     */
-    subject: string;
+    planner_id: string;
 };
 
 /**
@@ -106,7 +98,7 @@ export type GetAuthenticatedPrincipalResponses = {
     /**
      * Successful Response
      */
-    200: AuthenticatedPrincipalResponse;
+    200: PlannerPrincipalResponse;
 };
 
 export type GetAuthenticatedPrincipalResponse = GetAuthenticatedPrincipalResponses[keyof GetAuthenticatedPrincipalResponses];
