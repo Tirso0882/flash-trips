@@ -1614,6 +1614,19 @@
             the selected main commit before publishing digests. The CI-built
             image objects themselves are not promoted.
           </div>
+          <div class="callout">
+            <strong>Current release safety:</strong>
+            <code>scripts/production-deploy.sh</code> records the live digests,
+            updates both container apps, then smoke tests
+            <code>/api/status</code> through the public web app. A failing smoke
+            test re-pins the recorded digests, because
+            <code>infra/azure/main.bicep</code> sets Single active revision mode
+            and ingress traffic cannot be split. Rollback is skipped when the
+            only earlier digest is the Bicep placeholder or the failing digest,
+            and the job fails whenever the smoke test fails. Planned but absent:
+            the explicit migration step ADR 0016 requires, which arrives with
+            production PostgreSQL.
+          </div>
         </section>
 
         <section id="paths">

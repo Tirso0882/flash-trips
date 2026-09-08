@@ -38,6 +38,7 @@ test:
     pnpm test:traceability
     pnpm test:web-boundaries
     bash tests/scripts/production-release-plan.test.sh
+    bash tests/scripts/production-deploy.test.sh
     bash tests/scripts/publish-via-github-api.test.sh
 
 contracts:

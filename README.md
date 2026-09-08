@@ -191,6 +191,21 @@ pause at the protected `production` environment before deploying those exact
 digests. A manually dispatched Production workflow always releases its selected
 commit from `main`, including intentional redeployments.
 
+`scripts/production-deploy.sh` performs the release itself. It records the
+digests that are live, updates both container apps, then smoke tests production
+through the web boundary at `/api/status`. A failing smoke test restores the
+recorded digests and re-runs the smoke test, so a bad release does not stay
+live. Both apps run in Single active revision mode, so a rollback re-pins the
+previous digest as a new revision rather than shifting ingress traffic. When
+the digest that was live is the Bicep placeholder or the failing digest itself,
+there is no safe target: the script reports that production is serving the
+failed release and leaves it for an operator. The job fails in every
+smoke-test-failure case, including a successful rollback.
+
+Database migrations are not yet part of this workflow because production
+provisions no PostgreSQL. ADR 0016 requires migrations to run as an explicit
+deployment step, so that step has to land with the database.
+
 After the deployment files have reached `main`, run the repeatable setup wizard:
 
 ```sh
