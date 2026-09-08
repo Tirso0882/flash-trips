@@ -44,6 +44,11 @@ def test_live_provider_configuration_uses_the_exact_tenant_boundary() -> None:
     with pytest.raises(ValidationError):
         RuntimeSettings.model_validate(values)
 
+    values = _runtime_values()
+    values["flash_trips_oidc_tenant_subdomain"] = "evil.example/path"
+    with pytest.raises(ValidationError):
+        RuntimeSettings.model_validate(values)
+
 
 def test_provider_token_canary_never_reaches_logs(
     caplog: pytest.LogCaptureFixture,

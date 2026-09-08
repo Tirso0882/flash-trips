@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, webcrypto } from "node:crypto";
 import test from "node:test";
 
 import {
@@ -13,6 +13,8 @@ import {
 } from "../../apps/web/lib/server/oidc-flow.ts";
 import { OidcTransactionStore } from "../../apps/web/lib/server/oidc-transaction.ts";
 import { applicationSession } from "../../apps/web/lib/server/session-policy.ts";
+import { GET as callbackRoute } from "../../apps/web/app/api/auth/callback/route.ts";
+import { GET as signInRoute } from "../../apps/web/app/api/auth/sign-in/route.ts";
 
 const provider: OidcProvider = {
   authorizationEndpoint: "https://tenant.example/authorize",
@@ -24,6 +26,33 @@ const provider: OidcProvider = {
   scope: "api://flash-trips/access",
   tokenEndpoint: "https://tenant.example/token",
 };
+
+async function signedIdToken(
+  privateKey: CryptoKey,
+  nonce: string,
+): Promise<string> {
+  const issuedAt = Math.floor(Date.now() / 1_000);
+  const encodedHeader = Buffer.from(
+    JSON.stringify({ alg: "RS256", typ: "JWT" }),
+  ).toString("base64url");
+  const encodedPayload = Buffer.from(
+    JSON.stringify({
+      aud: provider.clientId,
+      exp: issuedAt + 300,
+      iat: issuedAt,
+      iss: provider.issuer,
+      nonce,
+      sub: "external-identity",
+    }),
+  ).toString("base64url");
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  const signature = await webcrypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    privateKey,
+    Buffer.from(signingInput),
+  );
+  return `${signingInput}.${Buffer.from(signature).toString("base64url")}`;
+}
 
 test("authorization uses code challenge, exact redirect, state, nonce, and Google", () => {
   const client = new OidcAuthorizationClient(provider);
@@ -73,14 +102,42 @@ test("callback failures exchange no token and establish no application session",
 });
 
 test("callback sends PKCE once and rejects an invalid ID-token nonce", async () => {
-  const client = new OidcAuthorizationClient(provider);
+  const keys = await webcrypto.subtle.generateKey(
+    {
+      hash: "SHA-256",
+      modulusLength: 2048,
+      name: "RSASSA-PKCS1-v1_5",
+      publicExponent: new Uint8Array([1, 0, 1]),
+    },
+    false,
+    ["sign", "verify"],
+  );
+  const client = new OidcAuthorizationClient(provider, {
+    verificationKey: keys.publicKey,
+  });
+  const validTransaction = client.begin().transaction;
+  const completed = await client.complete(
+    { code: "valid-code", state: validTransaction.state },
+    validTransaction,
+    async () =>
+      Response.json({
+        access_token: "verified-provider-token",
+        id_token: await signedIdToken(
+          keys.privateKey,
+          validTransaction.nonce,
+        ),
+        token_type: "Bearer",
+      }),
+  );
+  assert.deepEqual(completed, { accessToken: "verified-provider-token" });
+
   const transaction = client.begin().transaction;
   let body = "";
   const exchange = async (_url: string, init: RequestInit): Promise<Response> => {
     body = String(init.body);
     return Response.json({
       access_token: randomBytes(32).toString("base64url"),
-      id_token: "not-a-verifiable-id-token",
+      id_token: await signedIdToken(keys.privateKey, "wrong-nonce"),
       token_type: "Bearer",
     });
   };
@@ -216,4 +273,27 @@ test("callback errors are non-enumerating and establish no session", async () =>
   assert.equal(established, false);
   assert.equal(response.headers.get("location")!.includes("state"), false);
   assert.equal(response.headers.get("location")!.includes("code"), false);
+});
+
+test("provider startup failures return only the safe Planner error", async () => {
+  const signIn = await signInRoute(
+    new Request("https://app.example/api/auth/sign-in"),
+  );
+  assert.equal(
+    signIn.headers.get("location"),
+    "https://app.example/planner?sign_in=failed",
+  );
+
+  const callback = await callbackRoute(
+    new Request("https://app.example/api/auth/callback?code=private-code"),
+  );
+  assert.equal(
+    callback.headers.get("location"),
+    "https://app.example/planner?sign_in=failed",
+  );
+  assert.equal(callback.headers.get("location")!.includes("code"), false);
+  assert.match(
+    callback.headers.get("set-cookie")!,
+    /^__Host-flash_trips_oidc=;.*Max-Age=0/,
+  );
 });

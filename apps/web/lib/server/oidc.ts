@@ -32,6 +32,7 @@ type TokenFetcher = (
 type IdTokenVerifier = (idToken: string, nonce: string) => Promise<void>;
 
 interface OidcAuthorizationClientOptions {
+  verificationKey?: CryptoKey;
   verifyIdToken?: IdTokenVerifier;
 }
 
@@ -80,16 +81,30 @@ export class OidcAuthorizationClient {
     options: OidcAuthorizationClientOptions = {},
   ) {
     this.provider = provider;
-    const keys = createRemoteJWKSet(new URL(provider.jwksUri));
+    const verificationKey = options.verificationKey;
+    const verifyJwt =
+      verificationKey === undefined
+        ? (() => {
+            const keys = createRemoteJWKSet(new URL(provider.jwksUri));
+            return (idToken: string) =>
+              jwtVerify(idToken, keys, {
+                algorithms: ["RS256"],
+                audience: provider.clientId,
+                issuer: provider.issuer,
+                requiredClaims: ["exp", "iat", "nonce", "sub"],
+              });
+          })()
+        : (idToken: string) =>
+            jwtVerify(idToken, verificationKey, {
+              algorithms: ["RS256"],
+              audience: provider.clientId,
+              issuer: provider.issuer,
+              requiredClaims: ["exp", "iat", "nonce", "sub"],
+            });
     this.verifyIdToken =
       options.verifyIdToken ??
       (async (idToken, nonce) => {
-        const verified = await jwtVerify(idToken, keys, {
-          algorithms: ["RS256"],
-          audience: provider.clientId,
-          issuer: provider.issuer,
-          requiredClaims: ["exp", "iat", "nonce", "sub"],
-        });
+        const verified = await verifyJwt(idToken);
         if (
           typeof verified.payload.nonce !== "string" ||
           !valuesMatch(verified.payload.nonce, nonce)

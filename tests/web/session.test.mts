@@ -6,6 +6,7 @@ import {
   resolvePlannerId,
 } from "../../apps/web/lib/server/authenticated-session.ts";
 import { authenticationRequiredProblem } from "../../apps/web/lib/server/problems.ts";
+import { completeApplicationSignOut } from "../../apps/web/lib/server/sign-out-flow.ts";
 import { applicationSession } from "../../apps/web/lib/server/session-policy.ts";
 import {
   ApplicationSessionManager,
@@ -205,6 +206,36 @@ test("revocation and both expiry limits fail closed immediately", async () => {
   assert.equal(
     await sessions.authorize({
       cookieValue: absolute.cookieValue,
+      method: "GET",
+    }),
+    null,
+  );
+});
+
+test("the BFF sign-out clears its cookie and prevents replay", async () => {
+  const repository = new MemorySessions();
+  const sessions = manager(repository, new Date("2026-09-08T10:00:00Z"));
+  const issued = await sessions.authenticate({
+    accessToken: "exact-audience-token",
+    plannerId: "01991e28-1d65-7000-8000-000000000001",
+  });
+
+  const response = await completeApplicationSignOut({
+    cookieValue: issued.cookieValue,
+    csrfToken: issued.csrfToken,
+    method: "POST",
+    origin: "https://app.example",
+    sessions,
+  });
+
+  assert.equal(response.status, 204);
+  assert.match(
+    response.headers.get("set-cookie")!,
+    new RegExp(`^${applicationSession.cookieName}=;.*Max-Age=0`),
+  );
+  assert.equal(
+    await sessions.authorize({
+      cookieValue: issued.cookieValue,
       method: "GET",
     }),
     null,

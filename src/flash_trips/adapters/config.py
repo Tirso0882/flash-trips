@@ -1,3 +1,4 @@
+import re
 from typing import Literal, Self
 from uuid import UUID
 
@@ -78,6 +79,21 @@ class RuntimeSettings(BaseSettings):
         # type accepts no string form of its value.
         if isinstance(value, str):
             return int(value)
+        return value
+
+    @field_validator("flash_trips_oidc_tenant_subdomain")
+    @classmethod
+    def require_tenant_subdomain(cls, value: str | None) -> str | None:
+        if (
+            value is not None
+            and re.fullmatch(
+                r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]",
+                value,
+                re.IGNORECASE,
+            )
+            is None
+        ):
+            raise ValueError("OIDC tenant subdomain is invalid")
         return value
 
     @model_validator(mode="after")
