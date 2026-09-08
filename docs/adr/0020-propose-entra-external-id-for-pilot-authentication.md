@@ -6,8 +6,7 @@ Date checked: 2026-09-08
 
 ## Proposal
 
-Use Microsoft Entra External ID for the single-Planner pilot if the disposable
-registration passes the remaining live callback check. Keep Auth0 as the
+Use Microsoft Entra External ID for the single-Planner pilot. Keep Auth0 as the
 provider-neutral fallback. This record does not approve the choice.
 
 The implementation depends only on OIDC discovery, Authorization Code with
@@ -40,8 +39,11 @@ Google sign-in surface without a provider error. The token endpoint rejected a
 synthetic invalid code and verifier. No authorization code or token was
 captured or recorded.
 
-The authenticated Google callback remains unproved because the live check did
-not submit Google account credentials or receive an authorization code.
+The authenticated Google callback then completed through the exact HTTPS
+redirect. The one-time verifier exchanged the authorization code with its S256
+verifier and validated the ID token's RS256 signature, exact issuer, audience,
+state, and nonce. It reported only pass or fail and retained no authorization
+code, provider token, identity claim, or private payload.
 
 ## Current entitlement and cost
 
@@ -59,10 +61,9 @@ entitlement and recheck both offers before approval.
 
 ## Approval and disposal gate
 
-Before approving this proposal, run one redacted Google callback through the
-exact registered redirect, verify server-side sign-out and cookie replay
-denial, and record only pass/fail facts. The development registration must
-remain separate from any hosted registration.
+Before approving this proposal, confirm the disposable tenant's current
+entitlement and recheck the published identity-tier prices. The development
+registration must remain separate from any hosted registration.
 
 The disposable registration and client secret are offered for explicit
 transfer to the maintainer only if this proposal is approved. Otherwise the
