@@ -646,11 +646,15 @@
               <path class="flow" d="M710 105 H770" />
               <path class="flow" d="M710 185 H770" />
               <path class="flow" d="M710 285 H770" />
+              <path class="flow" d="M335 95 V38 H880 V55" />
               <text class="svg-label" x="210" y="191" text-anchor="middle">
                 HTTPS
               </text>
               <text class="svg-label" x="460" y="191" text-anchor="middle">
                 typed HTTP
+              </text>
+              <text class="svg-label" x="607" y="30" text-anchor="middle">
+                application sessions
               </text>
             </svg>
           </div>
@@ -674,6 +678,9 @@
               <p>
                 Web-to-API service status, FastAPI request IDs and typed
                 problems, provider-neutral authenticated-principal handling,
+                exact External Identity lookup with active-Planner enforcement,
+                Google OIDC Authorization Code with PKCE BFF routes, opaque
+                revocable application sessions,
                 generated contracts, container smoke tests, CI, and Azure
                 delivery.
               </p>
@@ -681,10 +688,52 @@
             <article class="panel">
               <h3>Defined but not connected</h3>
               <p>
-                The PostgreSQL transaction adapter and migration foundation,
-                secure session policy constants, JSON logger, Key Vault access,
-                and Application Insights resources exist but do not participate
-                in a current request flow.
+                <code>JwtAccessTokenVerifier</code> in
+                <code>src/flash_trips/adapters/identity/access_tokens.py</code>
+                verifies signed access tokens against an issuer, audience,
+                access-token claim contract, required scope, asymmetric algorithm
+                allowlist, and served JWKS. It also rejects a token carrying
+                ID-token claims. JWKS retrieval uses only the configured HTTPS
+                destination, bounded by the versioned
+                <code>JwksFetchPolicy</code> in
+                <code>src/flash_trips/adapters/config.py</code> for timeout,
+                response size, cache lifetime, and refresh rate. Rotation
+                replaces retired cached keys, while neither an unknown key ID
+                nor a failing issuer can refetch faster than that refresh
+                interval. These boundaries are proven
+                against the deterministic TLS local issuer in
+                <code>tests/identity/</code>. When the complete Entra
+                environment is present, <code>create_runtime_app</code>
+                composes this verifier with the exact tenant issuer, client
+                audience, and tenant JWKS. Missing provider configuration
+                retains the fail-closed
+                <code>RejectingAccessTokenVerifier</code>.
+              </p>
+              <p>
+                The PostgreSQL adapter implements the principal-scoped Planner
+                repository and unit of work. It also resolves only an exact
+                issuer and subject pair from
+                <code>external_identities</code> to an active Planner. The
+                runtime composition validates the configured single-entry
+                allowlist and connects that resolver to the protected route.
+                The linear, reversible Alembic history
+                also creates <code>application_sessions</code>, which stores
+                only a keyed digest of each opaque browser identifier and an
+                encrypted exact-audience access token. The BFF session manager
+                in <code>apps/web/lib/server/session.ts</code> enforces idle
+                and absolute expiry, revocation, origin validation, and
+                session-bound CSRF. It reaches that table over its own
+                PostgreSQL connection from
+                <code>apps/web/lib/server/session-runtime.ts</code> rather than
+                through FastAPI, so the web process needs
+                <code>DATABASE_URL</code> as well as the API base URL. The auth
+                sign-in, callback, session, and sign-out routes use the shared
+                cookie policy. The callback validates an encrypted,
+                short-lived state, nonce, PKCE verifier, exact redirect, token
+                response, and signed ID token before creating the application
+                session. Provider tokens never enter the browser. The JSON
+                logger, Key Vault access, and
+                Application Insights resources are not connected.
               </p>
             </article>
             <article class="panel">

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "issue": 248,
+  "title": "Sign in through live PKCE and propose the identity provider decision",
+  "outcome": "Added fail-closed Google PKCE sign-in through the provider-neutral identity and revocable application-session boundaries.",
+  "checks": [
+    {
+      "name": "PKCE BFF and application session boundary",
+      "command": [
+        "node",
+        "--conditions=react-server",
+        "--import",
+        "./tests/node/deny-network.mjs",
+        "--import",
+        "tsx",
+        "--test",
+        "tests/web/oidc.test.mts",
+        "tests/web/session.test.mts"
+      ]
+    },
+    {
+      "name": "provider configuration and redaction contract",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/integration/identity/test_live_provider_contract.py"
+      ]
+    }
+  ]
+}

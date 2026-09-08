@@ -57,13 +57,41 @@ hand.
 - `just typecheck`: strict Python and TypeScript checks
 - `just contracts`: regenerate OpenAPI and `@flash-trips/api-client`
 - `just contracts-check`: fail when committed generated contracts drift
-- `just test`: contract, persistence, and traceability tests
+- `just test`: contract, identity, persistence, and traceability tests
 - `just containers`: build both non-root OCI images
 - `just verify`: run lint, type checks, and tests during development
 - `just check`: run the complete non-container quality suite
 
 Persistence tests use real PostgreSQL. They skip only when `DATABASE_URL` and
 `MIGRATION_DATABASE_URL` are absent. CI and `.env.example` provide both values.
+
+`EXTERNAL_IDENTITY_ALLOWLIST` must be a JSON array containing exactly one
+`issuer` and `subject` pair. Startup rejects an empty or multi-entry array. The
+pair must also have an exact row in `external_identities` linked to an active
+Planner before the protected route grants access.
+
+The web BFF reads and writes `application_sessions` over its own PostgreSQL
+connection, so the web process needs `DATABASE_URL` alongside
+`FLASH_TRIPS_API_BASE_URL`. Alembic still owns that table's schema. The BFF
+requires `FLASH_TRIPS_ALLOWED_ORIGINS` as a comma-separated list
+of exact browser origins. `FLASH_TRIPS_SESSION_DIGEST_KEY` and
+`FLASH_TRIPS_SESSION_TOKEN_KEY` are separate base64url-encoded 32-byte keys.
+The first protects opaque session identifiers stored in PostgreSQL, and the
+second encrypts the exact-audience access token retained by the BFF. The values
+in `.env.example` are local-only and must be replaced outside local development.
+
+Google sign-in uses `GET /api/auth/sign-in` and the exact
+`FLASH_TRIPS_OIDC_REDIRECT_URI` callback. Configure the six
+`FLASH_TRIPS_OIDC_*` names in `.env.example` from one Entra External ID
+registration. The issuer must exactly match the tenant discovery document.
+Localhost callbacks may use HTTP, but must use a dedicated development
+registration. Hosted callbacks require HTTPS, and production rejects localhost.
+The client secret and provider tokens are server-only. Never add their values
+to `.env.example`, browser code, CI fixtures, logs, or evidence.
+
+Identity tests under `tests/identity/` mint tokens with an in-process issuer
+that serves its JWKS on a loopback listener. Apart from that listener and the
+PostgreSQL persistence tests, every test runs with sockets disabled.
 
 Local and CI configuration grants zero live-call authority. Identity, model,
 travel-provider, and Azure calls are outside this scaffold.

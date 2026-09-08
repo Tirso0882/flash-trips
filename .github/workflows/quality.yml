@@ -106,7 +106,13 @@ jobs:
           api_image=$(docker image inspect flash-trips-api:test --format '{{.Id}}')
           web_image=$(docker image inspect flash-trips-web:test --format '{{.Id}}')
           docker network create flash-trips-smoke
-          docker run --detach --name flash-trips-api --network flash-trips-smoke --network-alias api --publish 18000:8000 "$api_image"
+          # The API validates its runtime settings at startup. The smoke test
+          # calls only the status route, so it never opens a connection.
+          docker run --detach --name flash-trips-api --network flash-trips-smoke --network-alias api --publish 18000:8000 \
+            --env DATABASE_URL=postgresql+asyncpg://smoke:smoke-only@127.0.0.1:5432/flash_trips \
+            --env 'EXTERNAL_IDENTITY_ALLOWLIST=[{"issuer":"https://smoke-issuer.invalid","subject":"smoke-planner"}]' \
+            --env LIVE_CALL_ALLOWANCE=0 \
+            "$api_image"
           docker run --detach --name flash-trips-web --network flash-trips-smoke --publish 13000:3000 \
             --env FLASH_TRIPS_API_BASE_URL=http://api:8000 \
             --env FLASH_TRIPS_ALLOW_INSECURE_INTERNAL_API=true \

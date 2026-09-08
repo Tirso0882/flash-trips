@@ -1,6 +1,7 @@
 import "server-only";
 
 export const applicationSession = Object.freeze({
+  absoluteLifetimeSeconds: 7 * 24 * 60 * 60,
   cookieName: "__Host-flash_trips_session",
   cookieOptions: Object.freeze({
     httpOnly: true,
@@ -8,6 +9,7 @@ export const applicationSession = Object.freeze({
     sameSite: "strict" as const,
     secure: true,
   }),
+  idleLifetimeSeconds: 12 * 60 * 60,
 });
 
 export const originValidation = Object.freeze({

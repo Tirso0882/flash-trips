@@ -1,3 +1,6 @@
-from flash_trips.adapters.identity.access_tokens import RejectingAccessTokenVerifier
+from flash_trips.adapters.identity.access_tokens import (
+    JwtAccessTokenVerifier,
+    RejectingAccessTokenVerifier,
+)
 
-__all__ = ["RejectingAccessTokenVerifier"]
+__all__ = ["JwtAccessTokenVerifier", "RejectingAccessTokenVerifier"]

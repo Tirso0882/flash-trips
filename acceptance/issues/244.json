@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "issue": 244,
+  "title": "Issue a revocable server-side session behind an opaque application cookie",
+  "outcome": "Added opaque, revocable BFF sessions with bounded expiry, protected server-side tokens, origin checks, and session-bound CSRF.",
+  "checks": [
+    {
+      "name": "application session boundary",
+      "command": ["pnpm", "test:web-boundaries"]
+    }
+  ]
+}
