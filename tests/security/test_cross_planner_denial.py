@@ -92,6 +92,12 @@ PROTECTED_STATIONS = (
         ),
     ),
     ProtectedStation(
+        "Approval Request read",
+        lambda client, stations, headers: client.get(
+            f"/api/v1/trips/{stations.trip_id}/approval-request", headers=headers
+        ),
+    ),
+    ProtectedStation(
         "Approval action",
         lambda client, stations, headers: client.post(
             "/api/v1/approvals",
@@ -103,6 +109,13 @@ PROTECTED_STATIONS = (
         ),
     ),
     ProtectedStation(
+        "Handbook compilation",
+        lambda client, stations, headers: client.post(
+            f"/api/v1/trips/{stations.trip_id}/handbook-snapshots",
+            headers=headers,
+        ),
+    ),
+    ProtectedStation(
         "Handbook download",
         lambda client, stations, headers: client.get(
             f"/api/v1/handbook-snapshots/{stations.handbook_snapshot_id}/export",
@@ -111,9 +124,10 @@ PROTECTED_STATIONS = (
     ),
 )
 
-PROBLEM_STATIONS: tuple[tuple[str, StationRequest, StationRequest], ...] = (
+PROBLEM_STATIONS: tuple[tuple[str, int, StationRequest, StationRequest], ...] = (
     (
         "Trip read",
+        404,
         lambda client, stations, headers: client.get(
             f"/api/v1/trips/{stations.trip_id}", headers=headers
         ),
@@ -123,6 +137,7 @@ PROBLEM_STATIONS: tuple[tuple[str, StationRequest, StationRequest], ...] = (
     ),
     (
         "Run start",
+        404,
         lambda client, stations, headers: client.post(
             f"/api/v1/trips/{stations.trip_id}/runs", headers=headers
         ),
@@ -132,6 +147,7 @@ PROBLEM_STATIONS: tuple[tuple[str, StationRequest, StationRequest], ...] = (
     ),
     (
         "Run read",
+        404,
         lambda client, stations, headers: client.get(
             f"/api/v1/runs/{stations.run_id}", headers=headers
         ),
@@ -141,6 +157,7 @@ PROBLEM_STATIONS: tuple[tuple[str, StationRequest, StationRequest], ...] = (
     ),
     (
         "Plan Revision read",
+        404,
         lambda client, stations, headers: client.get(
             f"/api/v1/trips/{stations.trip_id}/plan-revision", headers=headers
         ),
@@ -149,7 +166,18 @@ PROBLEM_STATIONS: tuple[tuple[str, StationRequest, StationRequest], ...] = (
         ),
     ),
     (
+        "Approval Request read",
+        404,
+        lambda client, stations, headers: client.get(
+            f"/api/v1/trips/{stations.trip_id}/approval-request", headers=headers
+        ),
+        lambda client, _stations, headers: client.get(
+            f"/api/v1/trips/{MISSING_ID}/approval-request", headers=headers
+        ),
+    ),
+    (
         "Approval action",
+        404,
         lambda client, stations, headers: client.post(
             "/api/v1/approvals",
             headers=headers,
@@ -168,7 +196,19 @@ PROBLEM_STATIONS: tuple[tuple[str, StationRequest, StationRequest], ...] = (
         ),
     ),
     (
+        "Handbook compilation",
+        409,
+        lambda client, stations, headers: client.post(
+            f"/api/v1/trips/{stations.trip_id}/handbook-snapshots",
+            headers=headers,
+        ),
+        lambda client, _stations, headers: client.post(
+            f"/api/v1/trips/{MISSING_ID}/handbook-snapshots", headers=headers
+        ),
+    ),
+    (
         "Handbook download",
+        404,
         lambda client, stations, headers: client.get(
             f"/api/v1/handbook-snapshots/{stations.handbook_snapshot_id}/export",
             headers=headers,
@@ -233,12 +273,13 @@ async def test_second_planner_cannot_list_the_owners_trip(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("name", "foreign_request", "missing_request"),
+    ("name", "expected_status", "foreign_request", "missing_request"),
     PROBLEM_STATIONS,
 )
 async def test_foreign_and_nonexistent_resources_have_identical_problem_documents(
     two_planners: TwoPlannerFixture,
     name: str,
+    expected_status: int,
     foreign_request: StationRequest,
     missing_request: StationRequest,
 ) -> None:
@@ -252,6 +293,6 @@ async def test_foreign_and_nonexistent_resources_have_identical_problem_document
         two_planners.client, stations, two_planners.other_headers
     )
 
-    assert foreign.status_code == missing.status_code == 404
+    assert foreign.status_code == missing.status_code == expected_status
     assert foreign.headers["content-type"] == missing.headers["content-type"]
     assert problem_bytes(foreign) == problem_bytes(missing)

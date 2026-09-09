@@ -10,6 +10,21 @@ const resourceId = "01991e28-1d65-7000-8000-000000000099";
 
 type UnusableState = "revoked" | "idle-expired" | "absolute-expired";
 
+function csrfTokenFrom(value: unknown): string {
+  expect(value).toEqual(
+    expect.objectContaining({ csrf_token: expect.any(String) }),
+  );
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("csrf_token" in value) ||
+    typeof value.csrf_token !== "string"
+  ) {
+    throw new TypeError("Session response did not contain a CSRF token");
+  }
+  return value.csrf_token;
+}
+
 async function signIn(page: Page, baseUrl: string): Promise<string> {
   await page.goto(`${baseUrl}/planner`);
   await page.getByRole("link", { name: "Continue with Google" }).click();
@@ -23,7 +38,8 @@ async function signIn(page: Page, baseUrl: string): Promise<string> {
     .not.toBeUndefined();
   const session = await page.request.get(`${baseUrl}/api/auth/session`);
   expect(session.status()).toBe(200);
-  return ((await session.json()) as { csrf_token: string }).csrf_token;
+  const body: unknown = await session.json();
+  return csrfTokenFrom(body);
 }
 
 function makeSessionUnusable(state: UnusableState): void {

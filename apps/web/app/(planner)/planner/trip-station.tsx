@@ -4,6 +4,12 @@ import { FormEvent, useEffect, useState } from "react";
 
 import { PlanRevisionView, type PlanRevision } from "./plan-revision";
 
+// SKELETON_REPLACEMENT: issue 204 (FT-03) deepens this thin Trip station.
+// SKELETON_REPLACEMENT: issue 216 (FT-14) deepens this thin Plan Revision station.
+// SKELETON_REPLACEMENT: issue 200 (FT-21) deepens this thin Approval station.
+// SKELETON_REPLACEMENT: issue 220 (FT-22) deepens this thin Handbook station.
+// SKELETON_REPLACEMENT: issue 224 (FT-24) deepens this thin Handbook delivery.
+
 interface TripStay {
   city: string;
   ends_on: string;
@@ -49,6 +55,57 @@ interface HandbookSnapshot {
   format: "html";
   id: string;
   plan_revision_id: string;
+}
+
+function isSession(value: unknown): value is Session {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "csrf_token" in value &&
+    typeof value.csrf_token === "string"
+  );
+}
+
+function isTripStay(value: unknown): value is TripStay {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "city" in value &&
+    typeof value.city === "string" &&
+    "ends_on" in value &&
+    typeof value.ends_on === "string" &&
+    "nights" in value &&
+    typeof value.nights === "number" &&
+    "starts_on" in value &&
+    typeof value.starts_on === "string"
+  );
+}
+
+function isTrip(value: unknown): value is Trip {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("id" in value) ||
+    typeof value.id !== "string" ||
+    !("structure" in value) ||
+    typeof value.structure !== "object" ||
+    value.structure === null ||
+    !("stays" in value.structure) ||
+    !Array.isArray(value.structure.stays)
+  ) {
+    return false;
+  }
+  return value.structure.stays.every(isTripStay);
+}
+
+function isTripList(value: unknown): value is TripList {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "items" in value &&
+    Array.isArray(value.items) &&
+    value.items.every(isTrip)
+  );
 }
 
 const runStatuses = new Set([
@@ -206,8 +263,12 @@ export default function TripStation() {
         setError("Sign in to create and reopen private Trips.");
         return;
       }
-      const session = (await sessionResponse.json()) as Session;
-      const list = (await tripsResponse.json()) as TripList;
+      const session: unknown = await sessionResponse.json();
+      const list: unknown = await tripsResponse.json();
+      if (!isSession(session) || !isTripList(list)) {
+        setError("The session or Trip list response was invalid.");
+        return;
+      }
       setCsrfToken(session.csrf_token);
       setTrips(list.items);
       const revisions = await Promise.all(
@@ -257,7 +318,11 @@ export default function TripStation() {
       setError("The Trip could not be created.");
       return;
     }
-    const trip = (await response.json()) as Trip;
+    const trip: unknown = await response.json();
+    if (!isTrip(trip)) {
+      setError("The created Trip response was invalid.");
+      return;
+    }
     setTrips((current) => [...current, trip]);
     form.reset();
   }

@@ -10,6 +10,7 @@ import { apiBaseUrl } from "../../../lib/server/config";
 import {
   authenticationRequiredProblem,
   backendUnavailableProblem,
+  invalidRequestProblem,
 } from "../../../lib/server/problems";
 import { sessionManager } from "../../../lib/server/session-runtime";
 import {
@@ -18,6 +19,19 @@ import {
 } from "../../../lib/server/session-policy";
 
 export const dynamic = "force-dynamic";
+
+function isBoundApprovalActionRequest(
+  value: unknown,
+): value is BoundApprovalActionRequest {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "approval_request_id" in value &&
+    typeof value.approval_request_id === "string" &&
+    "plan_revision_id" in value &&
+    typeof value.plan_revision_id === "string"
+  );
+}
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const cookieStore = await cookies();
@@ -30,7 +44,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (session === null) return authenticationRequiredProblem();
 
   try {
-    const body = (await request.json()) as BoundApprovalActionRequest;
+    const body: unknown = await request.json();
+    if (!isBoundApprovalActionRequest(body)) return invalidRequestProblem();
     const result = await approvePlanRevision({
       body,
       client: createClient({ baseUrl: apiBaseUrl() }),

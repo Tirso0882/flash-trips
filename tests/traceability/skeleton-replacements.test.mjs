@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
-import { extname, join, resolve } from "node:path";
+import { extname, join, relative, resolve } from "node:path";
 import test from "node:test";
 
 const root = resolve(import.meta.dirname, "../..");
+const runtimeExtensions = new Set([".py", ".ts", ".tsx", ".yml", ".yaml"]);
+const runtimeRoots = [
+  "src",
+  "apps/web/app",
+  "apps/web/lib",
+  ".github/workflows",
+];
 const markerPattern =
   /SKELETON_REPLACEMENT: issue (\d+) \((FT-\d+)\) (?:deepens|replaces)/g;
 
@@ -12,18 +19,21 @@ function sourceFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) return sourceFiles(path);
-    return extname(path) === ".py" ? [path] : [];
+    return runtimeExtensions.has(extname(path)) ? [path] : [];
   });
 }
 
 function markerEntries() {
-  return sourceFiles(join(root, "src")).flatMap((path) => {
-    const source = readFileSync(path, "utf8");
-    return [...source.matchAll(markerPattern)].map((match) => ({
-      feature: match[2],
-      issue: Number(match[1]),
-    }));
-  });
+  return runtimeRoots.flatMap((directory) =>
+    sourceFiles(join(root, directory)).flatMap((path) => {
+      const source = readFileSync(path, "utf8");
+      return [...source.matchAll(markerPattern)].map((match) => ({
+        feature: match[2],
+        issue: Number(match[1]),
+        path: relative(root, path),
+      }));
+    }),
+  );
 }
 
 test("every walking-skeleton replacement marker names a registered open Feature issue", () => {
@@ -63,6 +73,15 @@ test("every walking-skeleton replacement marker names a registered open Feature 
     new Set(markers.map(({ feature, issue }) => `${feature}:${issue}`)),
     new Set(openIssues.keys()),
   );
+  const expectedLocations = new Set(
+    verified.issues.flatMap(({ feature, issue, paths }) =>
+      paths.map((path) => `${feature}:${issue}:${path}`),
+    ),
+  );
+  const markerLocations = new Set(
+    markers.map(({ feature, issue, path }) => `${feature}:${issue}:${path}`),
+  );
+  assert.deepEqual(markerLocations, expectedLocations);
 
   if (process.env.FLASH_TRIPS_VERIFY_OPEN_ISSUES === "1") {
     for (const marker of new Map(

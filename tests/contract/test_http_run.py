@@ -1,11 +1,12 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, date, datetime
 from types import TracebackType
 from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from flash_trips.adapters.service_status import StaticServiceStatus
 from flash_trips.application import (
     ActiveRunExistsError,
     ApprovalAlreadyRecordedError,
@@ -18,6 +19,7 @@ from flash_trips.application import (
     HandbookExportFormat,
     HandbookRepository,
     HandbookSnapshotRecord,
+    NewTripStay,
     PlannerPrincipal,
     PlannerRecord,
     PlannerRepository,
@@ -26,13 +28,27 @@ from flash_trips.application import (
     RunRecord,
     RunRepository,
     RunTerminalOutcome,
+    RunTerminalStatus,
     TerminalOutcomeAlreadyRecordedError,
+    TripPlanning,
     TripRecord,
     TripRepository,
     UnitOfWork,
 )
+from flash_trips.capabilities.travel_readiness import (
+    FixtureTravelReadinessCapability,
+    TravelReadinessAssessment,
+    TravelReadinessInput,
+    TravelReadinessRefusalReason,
+    TravelReadinessResult,
+)
 from flash_trips.composition import create_app
 from flash_trips.kernel.authenticated_principal import AuthenticatedPrincipal
+from flash_trips.kernel.capability import (
+    Capability,
+    CapabilityComplete,
+    CapabilityRefusal,
+)
 from flash_trips.kernel.identifiers import uuid7
 
 PLANNER_ID = UUID("01991e28-1d65-7000-8000-000000000001")
@@ -136,8 +152,11 @@ class MemoryRunRepository:
 class MemoryPlanRevisionRepository:
     principal: PlannerPrincipal
     records: list[PlanRevisionRecord]
+    fail_commit: bool = False
 
     async def commit(self, revision: PlanRevisionRecord) -> PlanRevisionRecord:
+        if self.fail_commit:
+            raise RuntimeError("sensitive commit failure")
         self.records.append(revision)
         return revision
 
@@ -175,6 +194,8 @@ class MemoryApprovalRepository:
     store: "MemoryUnitOfWorkFactory"
 
     async def present(self, request: ApprovalRequestRecord) -> None:
+        if self.store.failure_stage == "approval":
+            raise RuntimeError("sensitive presentation failure")
         self.store.approval_requests.append(request)
 
     async def get_request(
@@ -194,7 +215,8 @@ class MemoryApprovalRepository:
     async def approve(self, action: BoundApprovalAction) -> ApprovalRecord:
         request = await self.get_request(action.plan_revision_id)
         revision = await MemoryPlanRevisionRepository(
-            self.principal, self.store.plan_revisions
+            self.principal,
+            self.store.plan_revisions,
         ).get_current_for_id(action.plan_revision_id)
         if (
             request is None
@@ -305,7 +327,9 @@ class MemoryUnitOfWork:
         self.handbooks = MemoryHandbookRepository(self.principal, self.store)
         self.planners = UnusedPlannerRepository()
         self.plan_revisions = MemoryPlanRevisionRepository(
-            self.principal, self.store.plan_revisions
+            self.principal,
+            self.store.plan_revisions,
+            fail_commit=self.store.failure_stage == "revision",
         )
         self.trips = MemoryTripRepository(self.principal, self.store.trips)
         self.runs = MemoryRunRepository(self.principal, self.store.runs)
@@ -324,6 +348,7 @@ class MemoryUnitOfWork:
 
 @dataclass(slots=True)
 class MemoryUnitOfWorkFactory:
+    failure_stage: str | None = None
     approval_requests: list[ApprovalRequestRecord] = field(
         default_factory=list[ApprovalRequestRecord]
     )
@@ -342,6 +367,50 @@ class MemoryUnitOfWorkFactory:
 
     def __call__(self, principal: PlannerPrincipal) -> UnitOfWork:
         return MemoryUnitOfWork(principal, self)
+
+
+class ExplodingTravelReadiness(
+    Capability[
+        TravelReadinessInput,
+        TravelReadinessResult,
+        TravelReadinessRefusalReason,
+    ]
+):
+    async def execute(
+        self,
+        capability_input: TravelReadinessInput,
+    ) -> (
+        CapabilityComplete[TravelReadinessResult]
+        | CapabilityRefusal[TravelReadinessRefusalReason]
+    ):
+        del capability_input
+        raise RuntimeError("sensitive capability failure")
+
+
+class EvidenceFreeTravelReadiness(
+    Capability[
+        TravelReadinessInput,
+        TravelReadinessResult,
+        TravelReadinessRefusalReason,
+    ]
+):
+    async def execute(
+        self,
+        capability_input: TravelReadinessInput,
+    ) -> (
+        CapabilityComplete[TravelReadinessResult]
+        | CapabilityRefusal[TravelReadinessRefusalReason]
+    ):
+        del capability_input
+        return CapabilityComplete(
+            value=TravelReadinessResult(
+                fixture_id="evidence-free",
+                assessment=TravelReadinessAssessment.READY,
+                summary="Sensitive unsupported result",
+                observed_at=datetime.now(UTC),
+                evidence_references=(),
+            )
+        )
 
 
 def run_client(store: MemoryUnitOfWorkFactory) -> AsyncClient:
@@ -392,6 +461,81 @@ async def test_start_run_and_read_its_terminal_status() -> None:
     assert read.json()["trip_id"] == trip_id
     assert read.json()["status"] == "Succeeded"
     assert read.json()["terminal_outcome"]["code"] == "fixture_complete"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failure_stage", "capability", "message"),
+    (
+        pytest.param(
+            None,
+            None,
+            "Travel Readiness Capability is not configured",
+            id="missing-capability",
+        ),
+        pytest.param(
+            None,
+            ExplodingTravelReadiness(),
+            "sensitive capability failure",
+            id="capability-execution",
+        ),
+        pytest.param(
+            None,
+            EvidenceFreeTravelReadiness(),
+            "must reference Evidence",
+            id="evidence-validation",
+        ),
+        pytest.param(
+            "revision",
+            FixtureTravelReadinessCapability(),
+            "sensitive commit failure",
+            id="plan-revision-commit",
+        ),
+        pytest.param(
+            "approval",
+            FixtureTravelReadinessCapability(),
+            "sensitive presentation failure",
+            id="approval-request-presentation",
+        ),
+    ),
+)
+async def test_application_failure_records_one_safe_failed_terminal_outcome(
+    failure_stage: str | None,
+    capability: Capability[
+        TravelReadinessInput,
+        TravelReadinessResult,
+        TravelReadinessRefusalReason,
+    ]
+    | None,
+    message: str,
+) -> None:
+    store = MemoryUnitOfWorkFactory(failure_stage=failure_stage)
+    principal = PlannerPrincipal(planner_id=PLANNER_ID)
+    planning = TripPlanning(StaticServiceStatus(), store, capability)
+    trip = await planning.create_trip(
+        principal,
+        (
+            NewTripStay(
+                city="Lisbon",
+                starts_on=date(2026, 10, 4),
+                ends_on=date(2026, 10, 7),
+                nights=3,
+            ),
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match=message):
+        await planning.start_run(principal, trip.id)
+
+    assert len(store.runs) == 1
+    outcome = store.runs[0].terminal_outcome
+    assert outcome is not None
+    assert outcome == RunTerminalOutcome(
+        status=RunTerminalStatus.FAILED,
+        code="application_failure",
+        detail="The Run failed before completion.",
+    )
+    assert "sensitive" not in outcome.detail
 
 
 @pytest.mark.asyncio

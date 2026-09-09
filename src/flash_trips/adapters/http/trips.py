@@ -17,6 +17,8 @@ from flash_trips.application import (
     UnsupportedTripStructureError,
 )
 
+# SKELETON_REPLACEMENT: issue 204 (FT-03) deepens this thin Trip HTTP station.
+
 
 class TripStayInput(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -95,6 +97,7 @@ def _response(trip: TripRecord) -> TripResponse:
 def _problem_responses(
     *statuses: int,
 ) -> dict[int | str, dict[str, Any]]:
+    # FastAPI's open-ended response metadata requires Any at this framework seam.
     return {
         status: {
             "description": {

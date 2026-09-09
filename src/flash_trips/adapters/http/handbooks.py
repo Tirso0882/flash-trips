@@ -17,6 +17,9 @@ from flash_trips.application import (
     TripPlanning,
 )
 
+# SKELETON_REPLACEMENT: issue 220 (FT-22) deepens this thin Handbook HTTP station.
+# SKELETON_REPLACEMENT: issue 224 (FT-24) deepens this thin Handbook delivery.
+
 
 class HandbookSnapshotResponse(BaseModel):
     model_config = ConfigDict(frozen=True)

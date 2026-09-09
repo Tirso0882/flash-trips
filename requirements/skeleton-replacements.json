@@ -5,31 +5,60 @@
     {
       "feature": "FT-03",
       "issue": 204,
+      "paths": [
+        "apps/web/app/(planner)/planner/trip-station.tsx",
+        "src/flash_trips/adapters/http/trips.py",
+        "src/flash_trips/application/trip_planning.py"
+      ],
       "state": "OPEN"
     },
     {
       "feature": "FT-06",
       "issue": 208,
+      "paths": [
+        "src/flash_trips/capabilities/travel_readiness/_implementation.py"
+      ],
       "state": "OPEN"
     },
     {
       "feature": "FT-14",
       "issue": 216,
+      "paths": [
+        "apps/web/app/(planner)/planner/trip-station.tsx",
+        "src/flash_trips/adapters/http/plan_revisions.py",
+        "src/flash_trips/application/trip_planning.py"
+      ],
       "state": "OPEN"
     },
     {
       "feature": "FT-21",
       "issue": 200,
+      "paths": [
+        "apps/web/app/(planner)/planner/trip-station.tsx",
+        "src/flash_trips/adapters/http/approvals.py",
+        "src/flash_trips/application/trip_planning.py"
+      ],
       "state": "OPEN"
     },
     {
       "feature": "FT-22",
       "issue": 220,
+      "paths": [
+        "apps/web/app/(planner)/planner/trip-station.tsx",
+        "src/flash_trips/adapters/http/handbooks.py",
+        "src/flash_trips/application/trip_planning.py",
+        "src/flash_trips/platform/handbook/__init__.py"
+      ],
       "state": "OPEN"
     },
     {
       "feature": "FT-24",
       "issue": 224,
+      "paths": [
+        "apps/web/app/(planner)/planner/trip-station.tsx",
+        "src/flash_trips/adapters/http/handbooks.py",
+        "src/flash_trips/application/trip_planning.py"
+      ],
       "state": "OPEN"
     }
   ]

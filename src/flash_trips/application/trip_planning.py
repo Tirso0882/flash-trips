@@ -1,3 +1,4 @@
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from uuid import UUID
@@ -46,6 +47,12 @@ from .ports import ServiceStatusPort
 # SKELETON_REPLACEMENT: issue 200 (FT-21) deepens this thin Approval station.
 # SKELETON_REPLACEMENT: issue 220 (FT-22) deepens this thin Handbook station.
 # SKELETON_REPLACEMENT: issue 224 (FT-24) deepens this thin Handbook delivery.
+
+_FAILED_RUN_OUTCOME = RunTerminalOutcome(
+    status=RunTerminalStatus.FAILED,
+    code="application_failure",
+    detail="The Run failed before completion.",
+)
 
 
 class UnsupportedTripStructureError(ValueError):
@@ -142,62 +149,68 @@ class TripPlanning:
             )
             await unit_of_work.runs.add(run)
 
-        capability = self._travel_readiness
-        if capability is None:
-            raise RuntimeError("Travel Readiness Capability is not configured")
-        capability_outcome = await capability.execute(
-            TravelReadinessInput(
-                cities=tuple(stay.city for stay in trip.structure.stays),
-            )
-        )
-        if isinstance(capability_outcome, CapabilityComplete):
-            if not capability_outcome.value.evidence_references:
-                raise RuntimeError(
-                    "A completed Capability result must reference Evidence"
+        try:
+            capability = self._travel_readiness
+            if capability is None:
+                raise RuntimeError("Travel Readiness Capability is not configured")
+            capability_outcome = await capability.execute(
+                TravelReadinessInput(
+                    cities=tuple(stay.city for stay in trip.structure.stays),
                 )
-            terminal_outcome = RunTerminalOutcome(
-                status=RunTerminalStatus.SUCCEEDED,
-                code="fixture_complete",
-                detail=capability_outcome.value.summary,
             )
-        else:
-            terminal_outcome = RunTerminalOutcome(
-                status=RunTerminalStatus.BLOCKED,
-                code=capability_outcome.reason.value,
-                detail=capability_outcome.detail,
-            )
-        async with self._unit_of_work(principal) as unit_of_work:
             if isinstance(capability_outcome, CapabilityComplete):
-                current = await unit_of_work.plan_revisions.get_current(trip.id)
-                result = capability_outcome.value
-                revision = PlanRevisionRecord(
-                    id=uuid7(),
-                    planner_id=principal.planner_id,
-                    trip_id=trip.id,
-                    run_id=run.id,
-                    revision_number=(
-                        current.revision_number + 1 if current is not None else 1
-                    ),
-                    base_revision_id=current.id if current is not None else None,
-                    claims=(
-                        PlanClaimRecord(
-                            id=uuid7(),
-                            kind=PlanClaimKind.TRAVEL_READINESS,
-                            text=result.summary,
-                            evidence_reference=result.evidence_references[0],
-                            observed_at=result.observed_at,
-                        ),
-                    ),
+                if not capability_outcome.value.evidence_references:
+                    raise RuntimeError(
+                        "A completed Capability result must reference Evidence"
+                    )
+                terminal_outcome = RunTerminalOutcome(
+                    status=RunTerminalStatus.SUCCEEDED,
+                    code="fixture_complete",
+                    detail=capability_outcome.value.summary,
                 )
-                await unit_of_work.plan_revisions.commit(revision)
-                await unit_of_work.approvals.present(
-                    ApprovalRequestRecord(
+            else:
+                terminal_outcome = RunTerminalOutcome(
+                    status=RunTerminalStatus.BLOCKED,
+                    code=capability_outcome.reason.value,
+                    detail=capability_outcome.detail,
+                )
+            async with self._unit_of_work(principal) as unit_of_work:
+                if isinstance(capability_outcome, CapabilityComplete):
+                    current = await unit_of_work.plan_revisions.get_current(trip.id)
+                    result = capability_outcome.value
+                    revision = PlanRevisionRecord(
                         id=uuid7(),
                         planner_id=principal.planner_id,
-                        plan_revision_id=revision.id,
+                        trip_id=trip.id,
+                        run_id=run.id,
+                        revision_number=(
+                            current.revision_number + 1 if current is not None else 1
+                        ),
+                        base_revision_id=current.id if current is not None else None,
+                        claims=(
+                            PlanClaimRecord(
+                                id=uuid7(),
+                                kind=PlanClaimKind.TRAVEL_READINESS,
+                                text=result.summary,
+                                evidence_reference=result.evidence_references[0],
+                                observed_at=result.observed_at,
+                            ),
+                        ),
                     )
-                )
-            return await unit_of_work.runs.record_terminal(run.id, terminal_outcome)
+                    await unit_of_work.plan_revisions.commit(revision)
+                    await unit_of_work.approvals.present(
+                        ApprovalRequestRecord(
+                            id=uuid7(),
+                            planner_id=principal.planner_id,
+                            plan_revision_id=revision.id,
+                        )
+                    )
+                return await unit_of_work.runs.record_terminal(run.id, terminal_outcome)
+        except Exception:
+            # The original application failure remains the public behavior.
+            with suppress(Exception):
+                await self._record_failed_run(principal, run.id)
+            raise
 
     async def get_run(
         self,
@@ -298,3 +311,11 @@ class TripPlanning:
         if self._unit_of_work_factory is None:
             raise RuntimeError("Trip persistence is not configured")
         return self._unit_of_work_factory(principal)
+
+    async def _record_failed_run(
+        self,
+        principal: PlannerPrincipal,
+        run_id: UUID,
+    ) -> None:
+        async with self._unit_of_work(principal) as unit_of_work:
+            await unit_of_work.runs.record_terminal(run_id, _FAILED_RUN_OUTCOME)

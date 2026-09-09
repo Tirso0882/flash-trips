@@ -16,6 +16,8 @@ from flash_trips.application import (
     TripPlanning,
 )
 
+# SKELETON_REPLACEMENT: issue 216 (FT-14) deepens this thin Plan Revision HTTP station.
+
 
 class PlanClaimResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -75,6 +77,7 @@ def plan_revision_router(
             raise HTTPException(status_code=404, detail="plan_revision_not_found")
         return _response(revision)
 
+    # FastAPI's open-ended response metadata requires Any at this framework seam.
     responses: dict[int | str, dict[str, Any]] = {
         status: {
             "description": description,

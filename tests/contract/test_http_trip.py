@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import TracebackType
-from typing import Any, Self, cast
+from typing import Self, TypedDict
 from uuid import UUID
 
 import pytest
@@ -32,6 +32,21 @@ from flash_trips.kernel.authenticated_principal import AuthenticatedPrincipal
 
 PLANNER_ID = UUID("01991e28-1d65-7000-8000-000000000001")
 OTHER_PLANNER_ID = UUID("01991e28-1d65-7000-8000-000000000002")
+
+
+class TripStayInput(TypedDict):
+    city: str
+    starts_on: str
+    ends_on: str
+    nights: int
+
+
+class TripStructureInput(TypedDict):
+    stays: list[TripStayInput]
+
+
+class TripInput(TypedDict):
+    structure: TripStructureInput
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,7 +231,7 @@ def trip_client(
     )
 
 
-def trip_input(city: str = "Lisbon") -> dict[str, Any]:
+def trip_input(city: str = "Lisbon") -> TripInput:
     return {
         "structure": {
             "stays": [
@@ -253,9 +268,7 @@ async def test_create_list_and_reopen_a_private_trip() -> None:
 async def test_create_rejects_a_multi_city_structure_at_the_http_policy() -> None:
     store = MemoryUnitOfWorkFactory()
     request = trip_input()
-    structure = cast(dict[str, Any], request["structure"])
-    stays = cast(list[dict[str, object]], structure["stays"])
-    stays.append(
+    request["structure"]["stays"].append(
         {
             "city": "Porto",
             "starts_on": "2026-10-07",

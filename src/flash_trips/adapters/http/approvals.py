@@ -18,6 +18,8 @@ from flash_trips.application import (
     TripPlanning,
 )
 
+# SKELETON_REPLACEMENT: issue 200 (FT-21) deepens this thin Approval HTTP station.
+
 
 class BoundApprovalActionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -51,6 +53,7 @@ def _approval_response(approval: ApprovalRecord) -> ApprovalResponse:
 
 
 def _problem_responses() -> dict[int | str, dict[str, Any]]:
+    # FastAPI's open-ended response metadata requires Any at this framework seam.
     return {
         problem_status: {
             "description": description,
