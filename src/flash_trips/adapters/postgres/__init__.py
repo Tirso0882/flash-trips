@@ -7,6 +7,7 @@ from flash_trips.adapters.postgres.database import (
 from flash_trips.adapters.postgres.repositories import (
     PostgresApprovalRepository,
     PostgresExternalIdentityRepository,
+    PostgresHandbookRepository,
     PostgresPlannerRepository,
     PostgresRunRepository,
     PostgresTripRepository,
@@ -17,6 +18,7 @@ __all__ = [
     "PostgresDatabase",
     "PostgresExternalIdentityRepository",
     "PostgresExternalIdentityRepositoryFactory",
+    "PostgresHandbookRepository",
     "PostgresPlannerRepository",
     "PostgresRunRepository",
     "PostgresTripRepository",

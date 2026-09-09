@@ -11,7 +11,7 @@
         "run",
         "pytest",
         "-q",
-        "tests/persistence/test_planner_persistence.py::test_planner_table_appears_on_upgrade_and_is_removed_on_rollback"
+        "tests/persistence/test_planner_persistence.py::test_schema_upgrades_to_head_and_each_migration_downgrades"
       ]
     },
     {

@@ -43,6 +43,14 @@ interface ApprovalRequest {
   plan_revision_id: string;
 }
 
+interface HandbookSnapshot {
+  approval_id: string;
+  checksum: string;
+  format: "html";
+  id: string;
+  plan_revision_id: string;
+}
+
 const runStatuses = new Set([
   "Running",
   "Succeeded",
@@ -134,6 +142,23 @@ function isApprovalRequest(value: unknown): value is ApprovalRequest {
   );
 }
 
+function isHandbookSnapshot(value: unknown): value is HandbookSnapshot {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    typeof value.id === "string" &&
+    "plan_revision_id" in value &&
+    typeof value.plan_revision_id === "string" &&
+    "approval_id" in value &&
+    typeof value.approval_id === "string" &&
+    "format" in value &&
+    value.format === "html" &&
+    "checksum" in value &&
+    typeof value.checksum === "string"
+  );
+}
+
 async function loadCurrentPlanRevision(
   tripId: string,
 ): Promise<PlanRevision | null> {
@@ -162,6 +187,9 @@ export default function TripStation() {
   >({});
   const [csrfToken, setCsrfToken] = useState("");
   const [error, setError] = useState("");
+  const [handbooks, setHandbooks] = useState<Record<string, HandbookSnapshot>>(
+    {},
+  );
   const [runs, setRuns] = useState<Record<string, Run>>({});
   const [planRevisions, setPlanRevisions] = useState<
     Record<string, PlanRevision>
@@ -318,6 +346,33 @@ export default function TripStation() {
     }));
   }
 
+  async function downloadHandbook(
+    trip: Trip,
+    revision: PlanRevision,
+  ): Promise<void> {
+    setError("");
+    const response = await fetch(`/api/trips/${trip.id}/handbook-snapshot`, {
+      headers: { "x-flash-trips-csrf": csrfToken },
+      method: "POST",
+    });
+    if (!response.ok) {
+      setError("The Trip Handbook could not be compiled.");
+      return;
+    }
+    const value: unknown = await response.json();
+    if (!isHandbookSnapshot(value)) {
+      setError("The Handbook Snapshot response was invalid.");
+      return;
+    }
+    setHandbooks((current) => ({ ...current, [revision.id]: value }));
+    const link = document.createElement("a");
+    link.href = `/api/handbook-snapshots/${value.id}/export`;
+    link.download = `flash-trips-${value.id}.html`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+  }
+
   return (
     <section aria-labelledby="trips-heading">
       <h2 id="trips-heading">Your Trips</h2>
@@ -406,13 +461,33 @@ export default function TripStation() {
                         Approve Plan Revision {planRevision.revision_number}
                       </button>
                     ) : (
-                      <p
-                        aria-label={`Approval for Plan Revision ${planRevision.revision_number}`}
-                        role="status"
-                      >
-                        Approval recorded for revision{" "}
-                        <code>{approvalRequest.plan_revision_id}</code>
-                      </p>
+                      <>
+                        <p
+                          aria-label={`Approval for Plan Revision ${planRevision.revision_number}`}
+                          role="status"
+                        >
+                          Approval recorded for revision{" "}
+                          <code>{approvalRequest.plan_revision_id}</code>
+                        </p>
+                        <button
+                          disabled={csrfToken.length === 0}
+                          onClick={() =>
+                            void downloadHandbook(trip, planRevision)
+                          }
+                          type="button"
+                        >
+                          Download Trip Handbook
+                        </button>
+                        {handbooks[planRevision.id] !== undefined ? (
+                          <p
+                            aria-label={`Handbook for Plan Revision ${planRevision.revision_number}`}
+                            role="status"
+                          >
+                            Handbook Snapshot{" "}
+                            <code>{handbooks[planRevision.id]?.id}</code>
+                          </p>
+                        ) : null}
+                      </>
                     )}
                   </section>
                 ) : null}

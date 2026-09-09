@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ApprovePlanRevisionData, ApprovePlanRevisionErrors, ApprovePlanRevisionResponses, CreateTripData, CreateTripErrors, CreateTripResponses, GetAuthenticatedPrincipalData, GetAuthenticatedPrincipalErrors, GetAuthenticatedPrincipalResponses, GetCurrentApprovalRequestData, GetCurrentApprovalRequestErrors, GetCurrentApprovalRequestResponses, GetCurrentPlanRevisionData, GetCurrentPlanRevisionErrors, GetCurrentPlanRevisionResponses, GetRunData, GetRunErrors, GetRunResponses, GetServiceStatusData, GetServiceStatusErrors, GetServiceStatusResponses, GetTripData, GetTripErrors, GetTripResponses, ListTripsData, ListTripsErrors, ListTripsResponses, StartRunData, StartRunErrors, StartRunResponses } from './types.gen';
+import type { ApprovePlanRevisionData, ApprovePlanRevisionErrors, ApprovePlanRevisionResponses, CompileHandbookData, CompileHandbookErrors, CompileHandbookResponses, CreateTripData, CreateTripErrors, CreateTripResponses, DownloadHandbookData, DownloadHandbookErrors, DownloadHandbookResponses, GetAuthenticatedPrincipalData, GetAuthenticatedPrincipalErrors, GetAuthenticatedPrincipalResponses, GetCurrentApprovalRequestData, GetCurrentApprovalRequestErrors, GetCurrentApprovalRequestResponses, GetCurrentPlanRevisionData, GetCurrentPlanRevisionErrors, GetCurrentPlanRevisionResponses, GetRunData, GetRunErrors, GetRunResponses, GetServiceStatusData, GetServiceStatusErrors, GetServiceStatusResponses, GetTripData, GetTripErrors, GetTripResponses, ListTripsData, ListTripsErrors, ListTripsResponses, StartRunData, StartRunErrors, StartRunResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -37,6 +37,15 @@ export const approvePlanRevision = <ThrowOnError extends boolean = false>(option
 export const getAuthenticatedPrincipal = <ThrowOnError extends boolean = false>(options?: Options<GetAuthenticatedPrincipalData, ThrowOnError>): RequestResult<GetAuthenticatedPrincipalResponses, GetAuthenticatedPrincipalErrors, ThrowOnError> => (options?.client ?? client).get<GetAuthenticatedPrincipalResponses, GetAuthenticatedPrincipalErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/authenticated-principal',
+    ...options
+});
+
+/**
+ * Download Handbook
+ */
+export const downloadHandbook = <ThrowOnError extends boolean = false>(options: Options<DownloadHandbookData, ThrowOnError>): RequestResult<DownloadHandbookResponses, DownloadHandbookErrors, ThrowOnError> => (options.client ?? client).get<DownloadHandbookResponses, DownloadHandbookErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/handbook-snapshots/{snapshot_id}/export',
     ...options
 });
 
@@ -91,6 +100,15 @@ export const getTrip = <ThrowOnError extends boolean = false>(options: Options<G
 export const getCurrentApprovalRequest = <ThrowOnError extends boolean = false>(options: Options<GetCurrentApprovalRequestData, ThrowOnError>): RequestResult<GetCurrentApprovalRequestResponses, GetCurrentApprovalRequestErrors, ThrowOnError> => (options.client ?? client).get<GetCurrentApprovalRequestResponses, GetCurrentApprovalRequestErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/trips/{trip_id}/approval-request',
+    ...options
+});
+
+/**
+ * Compile Handbook
+ */
+export const compileHandbook = <ThrowOnError extends boolean = false>(options: Options<CompileHandbookData, ThrowOnError>): RequestResult<CompileHandbookResponses, CompileHandbookErrors, ThrowOnError> => (options.client ?? client).post<CompileHandbookResponses, CompileHandbookErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/trips/{trip_id}/handbook-snapshots',
     ...options
 });
 

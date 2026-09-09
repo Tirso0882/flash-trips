@@ -11,6 +11,7 @@ from flash_trips.kernel.authenticated_principal import AuthenticatedPrincipal
 from .repositories import (
     PostgresApprovalRepository,
     PostgresExternalIdentityRepository,
+    PostgresHandbookRepository,
     PostgresPlannerRepository,
     PostgresPlanRevisionRepository,
     PostgresRunRepository,
@@ -67,6 +68,7 @@ class PostgresUnitOfWork:
         self._principal = principal
         self._transaction: AbstractAsyncContextManager[AsyncConnection] | None = None
         self._approvals: PostgresApprovalRepository | None = None
+        self._handbooks: PostgresHandbookRepository | None = None
         self._planners: PostgresPlannerRepository | None = None
         self._plan_revisions: PostgresPlanRevisionRepository | None = None
         self._runs: PostgresRunRepository | None = None
@@ -77,6 +79,12 @@ class PostgresUnitOfWork:
         if self._approvals is None:
             raise RuntimeError("Unit of work has not been entered")
         return self._approvals
+
+    @property
+    def handbooks(self) -> PostgresHandbookRepository:
+        if self._handbooks is None:
+            raise RuntimeError("Unit of work has not been entered")
+        return self._handbooks
 
     @property
     def planners(self) -> PostgresPlannerRepository:
@@ -107,6 +115,7 @@ class PostgresUnitOfWork:
         connection = await transaction.__aenter__()
         self._transaction = transaction
         self._approvals = PostgresApprovalRepository(connection, self._principal)
+        self._handbooks = PostgresHandbookRepository(connection, self._principal)
         self._planners = PostgresPlannerRepository(connection, self._principal)
         self._plan_revisions = PostgresPlanRevisionRepository(
             connection, self._principal

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
+from hashlib import sha256
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
@@ -207,9 +208,86 @@ class ApprovalRepository(Protocol):
     ) -> ApprovalRecord | None: ...
 
 
+class HandbookNotEligibleError(LookupError):
+    """The revision and qualifying Approval binding could not be established."""
+
+
+class HandbookNotFoundError(LookupError):
+    pass
+
+
+class HandbookExportFormat(StrEnum):
+    HTML = "html"
+
+
+@dataclass(frozen=True, slots=True)
+class HandbookSnapshotRecord:
+    """One immutable HTML projection bound to an approved Plan Revision."""
+
+    id: UUID
+    planner_id: UUID
+    plan_revision_id: UUID
+    approval_id: UUID
+    document_schema_version: int
+    export_bytes: bytes
+    checksum: str
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        planner_id: UUID,
+        plan_revision_id: UUID,
+        approval_id: UUID,
+        document_schema_version: int,
+        export_bytes: bytes,
+    ) -> "HandbookSnapshotRecord":
+        from flash_trips.kernel.identifiers import uuid7
+
+        return cls(
+            id=uuid7(),
+            planner_id=planner_id,
+            plan_revision_id=plan_revision_id,
+            approval_id=approval_id,
+            document_schema_version=document_schema_version,
+            export_bytes=export_bytes,
+            checksum=sha256(export_bytes).hexdigest(),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class HandbookDeliveryRecord:
+    """An authorised retrieval, not an Approval or proof of opening."""
+
+    id: UUID
+    planner_id: UUID
+    snapshot_id: UUID
+    export_format: HandbookExportFormat
+    checksum: str
+    delivered_at: datetime
+
+
+class HandbookRepository(Protocol):
+    async def get_for_revision(
+        self,
+        plan_revision_id: UUID,
+    ) -> HandbookSnapshotRecord | None: ...
+
+    async def add(self, snapshot: HandbookSnapshotRecord) -> HandbookSnapshotRecord: ...
+
+    async def deliver(
+        self,
+        snapshot_id: UUID,
+        delivered_at: datetime,
+    ) -> tuple[HandbookSnapshotRecord, HandbookDeliveryRecord] | None: ...
+
+
 class UnitOfWork(Protocol):
     @property
     def approvals(self) -> ApprovalRepository: ...
+
+    @property
+    def handbooks(self) -> HandbookRepository: ...
 
     @property
     def planners(self) -> PlannerRepository: ...

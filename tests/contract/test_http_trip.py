@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 from types import TracebackType
 from typing import Any, Self, cast
 from uuid import UUID
@@ -11,6 +12,9 @@ from flash_trips.application import (
     ApprovalRepository,
     ApprovalRequestRecord,
     BoundApprovalAction,
+    HandbookDeliveryRecord,
+    HandbookRepository,
+    HandbookSnapshotRecord,
     PlannerPrincipal,
     PlannerRecord,
     PlannerRepository,
@@ -136,11 +140,33 @@ class UnusedApprovalRepository:
         return None
 
 
+@dataclass(frozen=True, slots=True)
+class UnusedHandbookRepository:
+    async def get_for_revision(
+        self, plan_revision_id: UUID
+    ) -> HandbookSnapshotRecord | None:
+        del plan_revision_id
+        return None
+
+    async def add(self, snapshot: HandbookSnapshotRecord) -> HandbookSnapshotRecord:
+        del snapshot
+        raise AssertionError("Handbook persistence is not used by Trip HTTP tests")
+
+    async def deliver(
+        self,
+        snapshot_id: UUID,
+        delivered_at: datetime,
+    ) -> tuple[HandbookSnapshotRecord, HandbookDeliveryRecord] | None:
+        del snapshot_id, delivered_at
+        return None
+
+
 @dataclass(slots=True)
 class MemoryUnitOfWork:
     principal: PlannerPrincipal
     records: list[TripRecord]
     approvals: ApprovalRepository = field(init=False)
+    handbooks: HandbookRepository = field(init=False)
     planners: PlannerRepository = field(init=False)
     plan_revisions: PlanRevisionRepository = field(init=False)
     runs: RunRepository = field(init=False)
@@ -148,6 +174,7 @@ class MemoryUnitOfWork:
 
     def __post_init__(self) -> None:
         self.approvals = UnusedApprovalRepository()
+        self.handbooks = UnusedHandbookRepository()
         self.planners = UnusedPlannerRepository()
         self.plan_revisions = UnusedPlanRevisionRepository()
         self.runs = UnusedRunRepository()

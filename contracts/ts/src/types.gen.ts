@@ -62,6 +62,34 @@ export type CreateTripRequest = {
 };
 
 /**
+ * HandbookExportFormat
+ */
+export type HandbookExportFormat = 'html';
+
+/**
+ * HandbookSnapshotResponse
+ */
+export type HandbookSnapshotResponse = {
+    /**
+     * Approval Id
+     */
+    approval_id: string;
+    /**
+     * Checksum
+     */
+    checksum: string;
+    format: HandbookExportFormat;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Plan Revision Id
+     */
+    plan_revision_id: string;
+};
+
+/**
  * PlanClaimKind
  */
 export type PlanClaimKind = 'travel_readiness';
@@ -397,6 +425,56 @@ export type GetAuthenticatedPrincipalResponses = {
 
 export type GetAuthenticatedPrincipalResponse = GetAuthenticatedPrincipalResponses[keyof GetAuthenticatedPrincipalResponses];
 
+export type DownloadHandbookData = {
+    body?: never;
+    path: {
+        /**
+         * Snapshot Id
+         */
+        snapshot_id: string;
+    };
+    query?: never;
+    url: '/api/v1/handbook-snapshots/{snapshot_id}/export';
+};
+
+export type DownloadHandbookErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemResponse;
+    /**
+     * Forbidden
+     */
+    403: ProblemResponse;
+    /**
+     * Handbook Not Found
+     */
+    404: ProblemResponse;
+    /**
+     * Handbook Not Eligible
+     */
+    409: ProblemResponse;
+    /**
+     * Unprocessable Request
+     */
+    422: ProblemResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ProblemResponse;
+};
+
+export type DownloadHandbookError = DownloadHandbookErrors[keyof DownloadHandbookErrors];
+
+export type DownloadHandbookResponses = {
+    /**
+     * Handbook HTML export
+     */
+    200: Blob | File;
+};
+
+export type DownloadHandbookResponse = DownloadHandbookResponses[keyof DownloadHandbookResponses];
+
 export type GetRunData = {
     body?: never;
     path: {
@@ -645,6 +723,56 @@ export type GetCurrentApprovalRequestResponses = {
 };
 
 export type GetCurrentApprovalRequestResponse = GetCurrentApprovalRequestResponses[keyof GetCurrentApprovalRequestResponses];
+
+export type CompileHandbookData = {
+    body?: never;
+    path: {
+        /**
+         * Trip Id
+         */
+        trip_id: string;
+    };
+    query?: never;
+    url: '/api/v1/trips/{trip_id}/handbook-snapshots';
+};
+
+export type CompileHandbookErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemResponse;
+    /**
+     * Forbidden
+     */
+    403: ProblemResponse;
+    /**
+     * Handbook Not Found
+     */
+    404: ProblemResponse;
+    /**
+     * Handbook Not Eligible
+     */
+    409: ProblemResponse;
+    /**
+     * Unprocessable Request
+     */
+    422: ProblemResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ProblemResponse;
+};
+
+export type CompileHandbookError = CompileHandbookErrors[keyof CompileHandbookErrors];
+
+export type CompileHandbookResponses = {
+    /**
+     * Successful Response
+     */
+    201: HandbookSnapshotResponse;
+};
+
+export type CompileHandbookResponse = CompileHandbookResponses[keyof CompileHandbookResponses];
 
 export type GetCurrentPlanRevisionData = {
     body?: never;

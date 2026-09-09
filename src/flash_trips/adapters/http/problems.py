@@ -113,6 +113,16 @@ async def http_problem(request: Request, error: Exception) -> JSONResponse:
             retryable=False,
             request_id=request.state.request_id,
         )
+    elif error.status_code == 404 and error.detail == "handbook_not_found":
+        problem = Problem(
+            type="https://flash-trips.example/problems/handbook-not-found",
+            title="Not Found",
+            status=404,
+            detail="The Handbook Snapshot was not found.",
+            code="handbook_not_found",
+            retryable=False,
+            request_id=request.state.request_id,
+        )
     elif error.status_code == 409 and active_run_id is not None:
         problem = Problem(
             type="https://flash-trips.example/problems/active-run-exists",
@@ -131,6 +141,16 @@ async def http_problem(request: Request, error: Exception) -> JSONResponse:
             status=409,
             detail="This Approval Request has already been approved.",
             code="approval_already_recorded",
+            retryable=False,
+            request_id=request.state.request_id,
+        )
+    elif error.status_code == 409 and error.detail == "handbook_not_eligible":
+        problem = Problem(
+            type="https://flash-trips.example/problems/handbook-not-eligible",
+            title="Handbook Not Eligible",
+            status=409,
+            detail="The current Plan Revision is not eligible for compilation.",
+            code="handbook_not_eligible",
             retryable=False,
             request_id=request.state.request_id,
         )

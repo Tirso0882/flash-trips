@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "issue": 267,
+  "title": "Compile and download a Handbook from the approved revision",
+  "outcome": "The owning Planner can compile and download deterministic escaped HTML from the approved Plan Revision, with every retrieval recorded as a Handbook Delivery.",
+  "checks": [
+    {
+      "name": "Handbook migration upgrade and downgrade",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/persistence/test_planner_persistence.py::test_migration_history_has_one_head_that_matches_the_mapped_models",
+        "tests/persistence/test_planner_persistence.py::test_schema_upgrades_to_head_and_each_migration_downgrades"
+      ]
+    },
+    {
+      "name": "Handbook persistence, rendering, and HTTP contracts",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/persistence/test_handbook.py",
+        "tests/platform/test_handbook_rendering.py",
+        "tests/contract/test_http_handbook.py"
+      ]
+    },
+    {
+      "name": "browser Handbook journey",
+      "command": ["pnpm", "test:journey"]
+    }
+  ]
+}

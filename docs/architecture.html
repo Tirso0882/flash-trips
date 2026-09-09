@@ -782,6 +782,23 @@
                 problem. The Next.js BFF requires the session-bound CSRF token
                 before forwarding the bound action.
               </p>
+              <p>
+                An approved current revision can be compiled through
+                <code>TripPlanning.compile_current_handbook</code>. The
+                format-neutral compiler in
+                <code>src/flash_trips/platform/handbook/</code> produces a
+                schema-versioned Handbook Document, and its deterministic HTML
+                renderer escapes untrusted claim text. PostgreSQL stores the
+                exact bytes and checksum in immutable
+                <code>handbook_snapshots</code>, bound to the owning Planner,
+                Plan Revision, and qualifying Approval. The authenticated
+                <code>/api/v1/handbook-snapshots/{snapshot_id}/export</code>
+                endpoint rechecks ownership and records one immutable
+                <code>handbook_deliveries</code> row for each authorised
+                retrieval. A Delivery is neither an Approval nor proof that the
+                file was opened. The Next.js BFF keeps the access token
+                server-side for compilation and download.
+              </p>
             </article>
             <article class="panel">
               <h3>Architecture slots</h3>
@@ -790,8 +807,8 @@
                 and Travel Readiness contains the one fixture-backed skeleton
                 implementation. The other Capability and platform packages
                 remain empty package markers. The Planner page contains the thin
-                Trip, Run, Plan Revision, and Approval stations; the Operator
-                page remains a shell. The contract stays in
+                Trip, Run, Plan Revision, Approval, and Handbook stations; the
+                Operator page remains a shell. The contract stays in
                 <code>src/flash_trips/kernel/</code>, the only module both
                 <code>flash_trips.application</code> and
                 <code>flash_trips.capabilities</code> may import under
@@ -823,7 +840,7 @@
               </p>
               <p>
                 The browser harness and its sign-in, Trip, Run, Plan Revision,
-                and Approval stations now exist in
+                Approval, and Handbook download stations now exist in
                 <code>tests/journey/</code>. The journey and its Evaluation
                 Fixtures are permanent. The thin implementations are not, and
                 each carries an in-code marker naming the Feature that replaces

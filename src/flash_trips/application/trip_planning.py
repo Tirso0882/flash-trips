@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from flash_trips.capabilities.travel_readiness import (
@@ -13,11 +13,19 @@ from flash_trips.kernel.capability import (
 )
 from flash_trips.kernel.identifiers import uuid7
 from flash_trips.kernel.service_status import ServiceStatus
+from flash_trips.platform.handbook import (
+    HandbookClaim,
+    compile_document,
+    render_html,
+)
 
 from .persistence import (
     ApprovalRecord,
     ApprovalRequestRecord,
     BoundApprovalAction,
+    HandbookNotEligibleError,
+    HandbookNotFoundError,
+    HandbookSnapshotRecord,
     PlanClaimKind,
     PlanClaimRecord,
     PlannerPrincipal,
@@ -36,6 +44,7 @@ from .ports import ServiceStatusPort
 # SKELETON_REPLACEMENT: issue 204 (FT-03) deepens this thin Trip station.
 # SKELETON_REPLACEMENT: issue 216 (FT-14) deepens this thin Plan Revision station.
 # SKELETON_REPLACEMENT: issue 200 (FT-21) deepens this thin Approval station.
+# SKELETON_REPLACEMENT: issue 220 (FT-22) deepens this thin Handbook station.
 
 
 class UnsupportedTripStructureError(ValueError):
@@ -231,6 +240,58 @@ class TripPlanning:
     ) -> ApprovalRecord | None:
         async with self._unit_of_work(principal) as unit_of_work:
             return await unit_of_work.approvals.get_approval(plan_revision_id)
+
+    async def compile_current_handbook(
+        self,
+        principal: PlannerPrincipal,
+        trip_id: UUID,
+    ) -> HandbookSnapshotRecord:
+        async with self._unit_of_work(principal) as unit_of_work:
+            revision = await unit_of_work.plan_revisions.get_current(trip_id)
+            if revision is None:
+                raise HandbookNotEligibleError(trip_id)
+            approval = await unit_of_work.approvals.get_approval(revision.id)
+            if approval is None:
+                raise HandbookNotEligibleError(revision.id)
+            existing = await unit_of_work.handbooks.get_for_revision(revision.id)
+            if existing is not None:
+                return existing
+            document = compile_document(
+                plan_revision_id=str(revision.id),
+                revision_number=revision.revision_number,
+                claims=tuple(
+                    HandbookClaim(
+                        text=claim.text,
+                        evidence_reference=claim.evidence_reference.value,
+                        observed_at=claim.observed_at,
+                    )
+                    for claim in revision.claims
+                ),
+            )
+            return await unit_of_work.handbooks.add(
+                HandbookSnapshotRecord.create(
+                    planner_id=principal.planner_id,
+                    plan_revision_id=revision.id,
+                    approval_id=approval.id,
+                    document_schema_version=document.schema_version,
+                    export_bytes=render_html(document),
+                )
+            )
+
+    async def download_handbook(
+        self,
+        principal: PlannerPrincipal,
+        snapshot_id: UUID,
+    ) -> HandbookSnapshotRecord:
+        async with self._unit_of_work(principal) as unit_of_work:
+            delivery = await unit_of_work.handbooks.deliver(
+                snapshot_id,
+                datetime.now(UTC),
+            )
+            if delivery is None:
+                raise HandbookNotFoundError(snapshot_id)
+            snapshot, _record = delivery
+            return snapshot
 
     def _unit_of_work(self, principal: PlannerPrincipal) -> UnitOfWork:
         if self._unit_of_work_factory is None:

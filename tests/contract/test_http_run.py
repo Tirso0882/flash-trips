@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 from types import TracebackType
 from uuid import UUID
 
@@ -13,6 +14,10 @@ from flash_trips.application import (
     ApprovalRepository,
     ApprovalRequestRecord,
     BoundApprovalAction,
+    HandbookDeliveryRecord,
+    HandbookExportFormat,
+    HandbookRepository,
+    HandbookSnapshotRecord,
     PlannerPrincipal,
     PlannerRecord,
     PlannerRepository,
@@ -220,6 +225,60 @@ class MemoryApprovalRepository:
         )
 
 
+@dataclass(slots=True)
+class MemoryHandbookRepository:
+    principal: PlannerPrincipal
+    store: "MemoryUnitOfWorkFactory"
+
+    async def get_for_revision(
+        self,
+        plan_revision_id: UUID,
+    ) -> HandbookSnapshotRecord | None:
+        return next(
+            (
+                snapshot
+                for snapshot in self.store.handbook_snapshots
+                if snapshot.plan_revision_id == plan_revision_id
+                and snapshot.planner_id == self.principal.planner_id
+            ),
+            None,
+        )
+
+    async def add(
+        self,
+        snapshot: HandbookSnapshotRecord,
+    ) -> HandbookSnapshotRecord:
+        self.store.handbook_snapshots.append(snapshot)
+        return snapshot
+
+    async def deliver(
+        self,
+        snapshot_id: UUID,
+        delivered_at: datetime,
+    ) -> tuple[HandbookSnapshotRecord, HandbookDeliveryRecord] | None:
+        snapshot = next(
+            (
+                item
+                for item in self.store.handbook_snapshots
+                if item.id == snapshot_id
+                and item.planner_id == self.principal.planner_id
+            ),
+            None,
+        )
+        if snapshot is None:
+            return None
+        delivery = HandbookDeliveryRecord(
+            id=uuid7(),
+            planner_id=self.principal.planner_id,
+            snapshot_id=snapshot.id,
+            export_format=HandbookExportFormat.HTML,
+            checksum=snapshot.checksum,
+            delivered_at=delivered_at,
+        )
+        self.store.handbook_deliveries.append(delivery)
+        return snapshot, delivery
+
+
 @dataclass(frozen=True, slots=True)
 class UnusedPlannerRepository:
     async def add(self, planner: PlannerRecord) -> None:
@@ -235,6 +294,7 @@ class MemoryUnitOfWork:
     principal: PlannerPrincipal
     store: "MemoryUnitOfWorkFactory"
     approvals: ApprovalRepository = field(init=False)
+    handbooks: HandbookRepository = field(init=False)
     planners: PlannerRepository = field(init=False)
     plan_revisions: PlanRevisionRepository = field(init=False)
     trips: TripRepository = field(init=False)
@@ -242,6 +302,7 @@ class MemoryUnitOfWork:
 
     def __post_init__(self) -> None:
         self.approvals = MemoryApprovalRepository(self.principal, self.store)
+        self.handbooks = MemoryHandbookRepository(self.principal, self.store)
         self.planners = UnusedPlannerRepository()
         self.plan_revisions = MemoryPlanRevisionRepository(
             self.principal, self.store.plan_revisions
@@ -267,6 +328,12 @@ class MemoryUnitOfWorkFactory:
         default_factory=list[ApprovalRequestRecord]
     )
     approvals: list[ApprovalRecord] = field(default_factory=list[ApprovalRecord])
+    handbook_deliveries: list[HandbookDeliveryRecord] = field(
+        default_factory=list[HandbookDeliveryRecord]
+    )
+    handbook_snapshots: list[HandbookSnapshotRecord] = field(
+        default_factory=list[HandbookSnapshotRecord]
+    )
     plan_revisions: list[PlanRevisionRecord] = field(
         default_factory=list[PlanRevisionRecord]
     )

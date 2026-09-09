@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
-test("a Planner signs in and reaches an authenticated Planner surface", async ({
+test("a Planner completes the path from sign-in through Handbook download", async ({
   page,
 }) => {
   const baseUrl = process.env.FLASH_TRIPS_JOURNEY_BASE_URL;
@@ -77,6 +78,31 @@ test("a Planner signs in and reaches an authenticated Planner surface", async ({
   await expect(
     page.getByRole("status", { name: "Approval for Plan Revision 1" }),
   ).toContainText(revisionIdentifier!);
+
+  const downloadStarted = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download Trip Handbook" }).click();
+  const download = await downloadStarted;
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+  const downloadedBytes = await readFile(downloadPath!);
+  expect(downloadedBytes).toEqual(
+    Buffer.from(
+      '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+        "<title>Trip Handbook, Plan Revision 1</title></head><body><main>" +
+        `<h1>Trip Handbook</h1><p>Plan Revision 1: <code>${revisionIdentifier}</code></p>` +
+        "<ul><li><p>No fixture Travel Readiness concerns were found for Lisbon.</p>" +
+        "<p>Evidence: evaluation-fixture:travel-readiness-lisbon-v1, observed " +
+        '<time datetime="2026-09-08T12:00:00+00:00">' +
+        "2026-09-08T12:00:00+00:00</time></p></li></ul></main></body></html>",
+    ),
+  );
+  const handbookIdentifier = await page
+    .getByRole("status", { name: "Handbook for Plan Revision 1" })
+    .locator("code")
+    .textContent();
+  expect(handbookIdentifier).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
 
   await page.reload();
   await expect(page.getByRole("list", { name: "Saved Trips" })).toContainText(

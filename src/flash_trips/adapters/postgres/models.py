@@ -274,6 +274,7 @@ class ApprovalModel(PostgresBase):
             ],
             ondelete="CASCADE",
         ),
+        UniqueConstraint("id", "plan_revision_id", "planner_id"),
         UniqueConstraint("approval_request_id"),
         UniqueConstraint("plan_revision_id"),
     )
@@ -294,6 +295,66 @@ class ApprovalModel(PostgresBase):
         Uuid,
         nullable=False,
         index=True,
+    )
+
+
+class HandbookSnapshotModel(PostgresBase):
+    __tablename__ = "handbook_snapshots"
+    __table_args__ = (
+        CheckConstraint("document_schema_version > 0", name="schema_version_positive"),
+        CheckConstraint("octet_length(checksum) = 64", name="checksum_length"),
+        ForeignKeyConstraint(
+            ["plan_revision_id", "planner_id"],
+            ["plan_revisions.id", "plan_revisions.planner_id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["approval_id", "plan_revision_id", "planner_id"],
+            ["approvals.id", "approvals.plan_revision_id", "approvals.planner_id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "planner_id"),
+        UniqueConstraint("plan_revision_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    planner_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("planners.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    plan_revision_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
+    approval_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
+    document_schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    export_bytes: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class HandbookDeliveryModel(PostgresBase):
+    __tablename__ = "handbook_deliveries"
+    __table_args__ = (
+        CheckConstraint("export_format IN ('html')", name="export_format_values"),
+        CheckConstraint("octet_length(checksum) = 64", name="checksum_length"),
+        ForeignKeyConstraint(
+            ["snapshot_id", "planner_id"],
+            ["handbook_snapshots.id", "handbook_snapshots.planner_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    planner_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("planners.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    snapshot_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
+    export_format: Mapped[str] = mapped_column(String(16), nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    delivered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
     )
 
 

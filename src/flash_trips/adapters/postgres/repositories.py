@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import insert, select, update
@@ -16,6 +17,10 @@ from flash_trips.application.persistence import (
     ApprovalRecord,
     ApprovalRequestRecord,
     BoundApprovalAction,
+    HandbookDeliveryRecord,
+    HandbookExportFormat,
+    HandbookNotEligibleError,
+    HandbookSnapshotRecord,
     PlanClaimKind,
     PlanClaimRecord,
     PlannerAccessStatus,
@@ -39,6 +44,8 @@ from .models import (
     ApprovalModel,
     ApprovalRequestModel,
     ExternalIdentityModel,
+    HandbookDeliveryModel,
+    HandbookSnapshotModel,
     PlanClaimModel,
     PlannerModel,
     PlanRevisionModel,
@@ -594,6 +601,147 @@ class PostgresApprovalRepository:
             planner_id=row.planner_id,
             approval_request_id=row.approval_request_id,
             plan_revision_id=row.plan_revision_id,
+        )
+
+
+class PostgresHandbookRepository:
+    def __init__(
+        self,
+        connection: AsyncConnection,
+        principal: PlannerPrincipal,
+    ) -> None:
+        self._connection = connection
+        self._principal = principal
+
+    async def get_for_revision(
+        self,
+        plan_revision_id: UUID,
+    ) -> HandbookSnapshotRecord | None:
+        return await self._get(plan_revision_id, by_revision=True)
+
+    async def add(
+        self,
+        snapshot: HandbookSnapshotRecord,
+    ) -> HandbookSnapshotRecord:
+        if snapshot.planner_id != self._principal.planner_id:
+            raise HandbookNotEligibleError(snapshot.plan_revision_id)
+        qualifying_approval = (
+            await self._connection.execute(
+                select(ApprovalModel.id)
+                .join(
+                    PlanRevisionModel,
+                    (PlanRevisionModel.id == ApprovalModel.plan_revision_id)
+                    & (PlanRevisionModel.planner_id == ApprovalModel.planner_id),
+                )
+                .join(
+                    TripModel,
+                    (TripModel.id == PlanRevisionModel.trip_id)
+                    & (TripModel.planner_id == PlanRevisionModel.planner_id),
+                )
+                .where(
+                    ApprovalModel.id == snapshot.approval_id,
+                    ApprovalModel.plan_revision_id == snapshot.plan_revision_id,
+                    ApprovalModel.planner_id == self._principal.planner_id,
+                    TripModel.current_plan_revision_id == snapshot.plan_revision_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if qualifying_approval is None:
+            raise HandbookNotEligibleError(snapshot.plan_revision_id)
+
+        inserted = await self._connection.execute(
+            postgres_insert(HandbookSnapshotModel)
+            .values(
+                id=snapshot.id,
+                planner_id=self._principal.planner_id,
+                plan_revision_id=snapshot.plan_revision_id,
+                approval_id=snapshot.approval_id,
+                document_schema_version=snapshot.document_schema_version,
+                export_bytes=snapshot.export_bytes,
+                checksum=snapshot.checksum,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[HandbookSnapshotModel.plan_revision_id]
+            )
+            .returning(HandbookSnapshotModel.id)
+        )
+        if inserted.scalar_one_or_none() is not None:
+            return snapshot
+        existing = await self.get_for_revision(snapshot.plan_revision_id)
+        if existing is None or (
+            existing.approval_id != snapshot.approval_id
+            or existing.document_schema_version != snapshot.document_schema_version
+            or existing.export_bytes != snapshot.export_bytes
+            or existing.checksum != snapshot.checksum
+        ):
+            raise HandbookNotEligibleError(snapshot.plan_revision_id)
+        return existing
+
+    async def deliver(
+        self,
+        snapshot_id: UUID,
+        delivered_at: datetime,
+    ) -> tuple[HandbookSnapshotRecord, HandbookDeliveryRecord] | None:
+        snapshot = await self._get(snapshot_id)
+        if snapshot is None:
+            return None
+        delivery = HandbookDeliveryRecord(
+            id=uuid7(),
+            planner_id=self._principal.planner_id,
+            snapshot_id=snapshot.id,
+            export_format=HandbookExportFormat.HTML,
+            checksum=snapshot.checksum,
+            delivered_at=delivered_at,
+        )
+        await self._connection.execute(
+            insert(HandbookDeliveryModel).values(
+                id=delivery.id,
+                planner_id=delivery.planner_id,
+                snapshot_id=delivery.snapshot_id,
+                export_format=delivery.export_format.value,
+                checksum=delivery.checksum,
+                delivered_at=delivery.delivered_at,
+            )
+        )
+        return snapshot, delivery
+
+    async def _get(
+        self,
+        identifier: UUID,
+        *,
+        by_revision: bool = False,
+    ) -> HandbookSnapshotRecord | None:
+        identifier_column = (
+            HandbookSnapshotModel.plan_revision_id
+            if by_revision
+            else HandbookSnapshotModel.id
+        )
+        row = (
+            await self._connection.execute(
+                select(
+                    HandbookSnapshotModel.id,
+                    HandbookSnapshotModel.planner_id,
+                    HandbookSnapshotModel.plan_revision_id,
+                    HandbookSnapshotModel.approval_id,
+                    HandbookSnapshotModel.document_schema_version,
+                    HandbookSnapshotModel.export_bytes,
+                    HandbookSnapshotModel.checksum,
+                ).where(
+                    identifier_column == identifier,
+                    HandbookSnapshotModel.planner_id == self._principal.planner_id,
+                )
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        return HandbookSnapshotRecord(
+            id=row.id,
+            planner_id=row.planner_id,
+            plan_revision_id=row.plan_revision_id,
+            approval_id=row.approval_id,
+            document_schema_version=row.document_schema_version,
+            export_bytes=row.export_bytes,
+            checksum=row.checksum,
         )
 
 

@@ -65,13 +65,13 @@ def test_migration_history_has_one_head_that_matches_the_mapped_models(
 ) -> None:
     heads = run_alembic("heads").stdout.strip().splitlines()
 
-    assert heads == ["0008_approval (head)"]
+    assert heads == ["0009_handbook (head)"]
     run_alembic("check")
 
 
 @pytest.mark.persistence
 @pytest.mark.enable_socket
-def test_planner_table_appears_on_upgrade_and_is_removed_on_rollback() -> None:
+def test_schema_upgrades_to_head_and_each_migration_downgrades() -> None:
     runtime_url = psycopg_url("DATABASE_URL")
 
     run_alembic("downgrade", "base")
@@ -86,7 +86,7 @@ def test_planner_table_appears_on_upgrade_and_is_removed_on_rollback() -> None:
         run_alembic("upgrade", "head")
         with psycopg.connect(runtime_url) as connection, connection.cursor() as cursor:
             cursor.execute("SELECT version_num FROM alembic_version")
-            assert cursor.fetchone() == ("0008_approval",)
+            assert cursor.fetchone() == ("0009_handbook",)
             cursor.execute("SELECT to_regclass('public.planners')")
             assert cursor.fetchone() == ("planners",)
             cursor.execute("SELECT to_regclass('public.external_identities')")
@@ -107,6 +107,17 @@ def test_planner_table_appears_on_upgrade_and_is_removed_on_rollback() -> None:
             assert cursor.fetchone() == ("approval_requests",)
             cursor.execute("SELECT to_regclass('public.approvals')")
             assert cursor.fetchone() == ("approvals",)
+            cursor.execute("SELECT to_regclass('public.handbook_snapshots')")
+            assert cursor.fetchone() == ("handbook_snapshots",)
+            cursor.execute("SELECT to_regclass('public.handbook_deliveries')")
+            assert cursor.fetchone() == ("handbook_deliveries",)
+
+        run_alembic("downgrade", "0008_approval")
+        with psycopg.connect(runtime_url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT to_regclass('public.handbook_snapshots')")
+            assert cursor.fetchone() == (None,)
+            cursor.execute("SELECT to_regclass('public.handbook_deliveries')")
+            assert cursor.fetchone() == (None,)
 
         run_alembic("downgrade", "0007_plan_revision")
         with psycopg.connect(runtime_url) as connection, connection.cursor() as cursor:
