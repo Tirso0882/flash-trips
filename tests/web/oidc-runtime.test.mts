@@ -9,9 +9,10 @@ const issuer = `https://${tenantId}.ciamlogin.com/${tenantId}/v2.0`;
 
 // External ID answers discovery on whichever host is asked and always reports
 // the tenant-identifier issuer, so the endpoint hosts mirror the request.
-function externalIdentityDiscovery(
-  document: Record<string, unknown> = {},
-): { fetcher: typeof fetch; requested: string[] } {
+function externalIdentityDiscovery(document: Record<string, unknown> = {}): {
+  fetcher: typeof fetch;
+  requested: string[];
+} {
   const requested: string[] = [];
   const fetcher = (async (input: string | URL | Request) => {
     const url = new URL(String(input));
@@ -38,6 +39,8 @@ function configure(overrides: Record<string, string> = {}): void {
     FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN: tenantSubdomain,
     ...overrides,
   };
+  delete process.env.FLASH_TRIPS_TEST_OIDC_DISCOVERY_URL;
+  process.env.NODE_ENV = "test";
   for (const [name, value] of Object.entries(environment)) {
     if (value.length === 0) {
       delete process.env[name];
@@ -46,6 +49,49 @@ function configure(overrides: Record<string, string> = {}): void {
     }
   }
 }
+
+test("journey mode trusts only an explicit loopback discovery endpoint", async () => {
+  configure({
+    FLASH_TRIPS_OIDC_ISSUER: "https://127.0.0.1:4317",
+    FLASH_TRIPS_OIDC_TENANT_ID: "",
+    FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN: "",
+    FLASH_TRIPS_OIDC_REDIRECT_URI: "http://localhost:4300/api/auth/callback",
+  });
+  process.env.FLASH_TRIPS_TEST_OIDC_DISCOVERY_URL =
+    "https://127.0.0.1:4317/.well-known/openid-configuration";
+  const requested: string[] = [];
+  const fetcher: typeof fetch = async (input) => {
+    requested.push(String(input));
+    return Response.json({
+      authorization_endpoint: "https://127.0.0.1:4317/authorize",
+      issuer: "https://127.0.0.1:4317",
+      jwks_uri: "https://127.0.0.1:4317/.well-known/jwks.json",
+      token_endpoint: "https://127.0.0.1:4317/token",
+    });
+  };
+
+  const provider = await loadProvider(fetcher);
+
+  assert.deepEqual(requested, [
+    "https://127.0.0.1:4317/.well-known/openid-configuration",
+  ]);
+  assert.equal(
+    provider.authorizationEndpoint,
+    "https://127.0.0.1:4317/authorize",
+  );
+});
+
+test("journey mode refuses a non-loopback discovery endpoint", async () => {
+  configure({
+    FLASH_TRIPS_OIDC_ISSUER: "https://issuer.example",
+    FLASH_TRIPS_OIDC_TENANT_ID: "",
+    FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN: "",
+  });
+  process.env.FLASH_TRIPS_TEST_OIDC_DISCOVERY_URL =
+    "https://issuer.example/.well-known/openid-configuration";
+
+  await assert.rejects(loadProvider(), /loopback/);
+});
 
 test("discovery is fetched from the tenant subdomain that serves the endpoints", async () => {
   configure();
@@ -75,10 +121,7 @@ test("an issuer that is not the exact tenant issuer is rejected", async () => {
   });
   const discovery = externalIdentityDiscovery();
 
-  await assert.rejects(
-    loadProvider(discovery.fetcher),
-    /exact tenant issuer/,
-  );
+  await assert.rejects(loadProvider(discovery.fetcher), /exact tenant issuer/);
   assert.deepEqual(discovery.requested, []);
 });
 
@@ -97,7 +140,10 @@ test("a discovery issuer that disagrees with configuration is refused", async ()
     issuer: "https://other-tenant.ciamlogin.com/other/v2.0",
   });
 
-  await assert.rejects(loadProvider(discovery.fetcher), /issuer does not match/);
+  await assert.rejects(
+    loadProvider(discovery.fetcher),
+    /issuer does not match/,
+  );
 });
 
 test("a required setting is reported by name when absent", async () => {

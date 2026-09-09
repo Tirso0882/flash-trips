@@ -1366,8 +1366,12 @@
             environment from <code>infra/azure/skeleton.bicep</code>. It
             exposes the web/BFF over HTTPS, keeps FastAPI internal, uses one
             low-cost PostgreSQL server, and grants no model or travel-provider
-            authority. The complete test baseline and the production path
-            shown below remain deferred and unchanged.
+            authority. The <code>walking-skeleton</code> job in
+            <code>.github/workflows/quality.yml</code> runs only after all CI
+            jobs pass on the E-SKELETON Feature branch, updates both apps,
+            migrates PostgreSQL, and smoke tests the public BFF boundary. The
+            complete test baseline and the production path shown below remain
+            deferred and unchanged.
           </p>
           <p class="section-intro">
             Pull requests and main run three CI jobs. The required quality job

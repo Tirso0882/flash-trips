@@ -7,7 +7,7 @@ param location string = resourceGroup().location
 param githubSubjectPrefix string
 
 @description('Branch whose pushes may update the walking-skeleton environment.')
-param githubBranch string = 'sandcastle/feature-E-SKELETON'
+param githubBranch string = 'sandcastle/feature-261'
 
 @description('Resource name prefix.')
 param prefix string = 'flash-trips-skeleton'
@@ -187,7 +187,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
       ingress: {
         allowInsecure: false
         external: false
-        targetPort: 80
+        targetPort: 8000
         transport: 'auto'
       }
       registries: [
@@ -236,7 +236,7 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = {
       ingress: {
         allowInsecure: false
         external: true
-        targetPort: 80
+        targetPort: 3000
         transport: 'auto'
       }
       registries: [

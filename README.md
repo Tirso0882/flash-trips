@@ -15,6 +15,7 @@ HTTP contracts, tests, and deployment-neutral build files.
 
 ```sh
 just install
+pnpm install:journey-browser
 cp .env.example .env
 docker compose up -d postgres azurite
 just migrate
@@ -79,7 +80,10 @@ a single ticket should build.
 - `just typecheck`: strict Python and TypeScript checks
 - `just contracts`: regenerate OpenAPI and `@flash-trips/api-client`
 - `just contracts-check`: fail when committed generated contracts drift
-- `just test`: contract, identity, persistence, and traceability tests
+- `just journey`: boot disposable PostgreSQL, FastAPI, Next.js, and the local
+  identity issuer, then run the browser journey
+- `just test`: the journey plus contract, identity, persistence, and
+  traceability tests
 - `just containers`: build both non-root OCI images
 - `just verify`: run lint, type checks, and tests during development
 - `just check`: run the complete non-container quality suite
@@ -204,9 +208,11 @@ ready and enables squash auto-merge. GitHub merges only after the required
 T-01 owns a small Azure test environment for browser feedback while
 E-SKELETON is under development. `infra/azure/skeleton.bicep` defines its
 test-only registry, Container Apps environment, internal API, public web app,
-and low-cost PostgreSQL server. The template leaves placeholder containers
-until T-01 adds the Feature-branch deployment workflow and runtime
-configuration.
+and low-cost PostgreSQL server. A successful push to
+`sandcastle/feature-261` builds and publishes both images, migrates the
+database, updates both apps, and smoke tests `/api/status` through the public
+web URL. The workflow is the `walking-skeleton` job in
+`.github/workflows/quality.yml`.
 
 This environment is disposable, has zero model and travel-provider authority,
 and is not a production baseline. Its PostgreSQL server accepts connections
@@ -214,6 +220,13 @@ from Azure services and initially uses one administrator credential. Do not
 store that credential in git. Private networking, separate runtime and
 migration database identities, complete telemetry, production approval, and
 digest promotion remain deferred to E-AZURE-TEST and the release Features.
+
+The workflow reads resource names and OIDC configuration from
+`AZURE_SKELETON_*`, `AZURE_*`, and `FLASH_TRIPS_OIDC_*` repository variables.
+The `walking-skeleton` GitHub environment supplies the database URL, External
+Identity subject, OIDC client secret, and two session keys as secrets. Their
+exact names are authoritative in `.github/workflows/quality.yml`. Never put
+their values in the template, workflow, browser bundle, or logs.
 
 ## Production deployment
 

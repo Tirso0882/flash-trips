@@ -33,26 +33,9 @@ function providerEnvironment(): {
     OidcProvider,
     "clientId" | "clientSecret" | "issuer" | "redirectUri" | "scope"
   >;
-  providerHostname: string;
+  providerOrigin: string;
 } {
-  const tenantId = requiredEnvironment("FLASH_TRIPS_OIDC_TENANT_ID");
-  const tenantSubdomain = requiredEnvironment(
-    "FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN",
-  );
-  if (!/^[0-9a-f-]{36}$/i.test(tenantId)) {
-    throw new Error("FLASH_TRIPS_OIDC_TENANT_ID must be a tenant UUID");
-  }
-  if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/i.test(tenantSubdomain)) {
-    throw new Error("FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN is invalid");
-  }
-
-  const providerHostname = `${tenantSubdomain}.ciamlogin.com`;
   const issuer = requiredEnvironment("FLASH_TRIPS_OIDC_ISSUER");
-  const expectedIssuer = `https://${tenantId}.ciamlogin.com/${tenantId}/v2.0`;
-  if (issuer !== expectedIssuer) {
-    throw new Error("FLASH_TRIPS_OIDC_ISSUER is not the exact tenant issuer");
-  }
-
   const redirect = new URL(
     requiredEnvironment("FLASH_TRIPS_OIDC_REDIRECT_URI"),
   );
@@ -70,6 +53,49 @@ function providerEnvironment(): {
   }
 
   const clientId = requiredEnvironment("FLASH_TRIPS_OIDC_CLIENT_ID");
+  const testDiscovery = process.env.FLASH_TRIPS_TEST_OIDC_DISCOVERY_URL;
+  if (testDiscovery !== undefined) {
+    const discoveryUrl = new URL(testDiscovery);
+    if (
+      process.env.NODE_ENV === "production" ||
+      discoveryUrl.protocol !== "https:" ||
+      !localHostname(discoveryUrl.hostname)
+    ) {
+      throw new Error(
+        "FLASH_TRIPS_TEST_OIDC_DISCOVERY_URL must be an HTTPS loopback URL outside production",
+      );
+    }
+    if (new URL(issuer).origin !== discoveryUrl.origin) {
+      throw new Error("Journey OIDC issuer must match the discovery origin");
+    }
+    return {
+      discoveryUrl,
+      provider: {
+        clientId,
+        clientSecret: requiredEnvironment("FLASH_TRIPS_OIDC_CLIENT_SECRET"),
+        issuer,
+        redirectUri: redirect.toString(),
+        scope: `api://${clientId}/principal:read`,
+      },
+      providerOrigin: discoveryUrl.origin,
+    };
+  }
+
+  const tenantId = requiredEnvironment("FLASH_TRIPS_OIDC_TENANT_ID");
+  const tenantSubdomain = requiredEnvironment(
+    "FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN",
+  );
+  if (!/^[0-9a-f-]{36}$/i.test(tenantId)) {
+    throw new Error("FLASH_TRIPS_OIDC_TENANT_ID must be a tenant UUID");
+  }
+  if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/i.test(tenantSubdomain)) {
+    throw new Error("FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN is invalid");
+  }
+  const providerHostname = `${tenantSubdomain}.ciamlogin.com`;
+  const expectedIssuer = `https://${tenantId}.ciamlogin.com/${tenantId}/v2.0`;
+  if (issuer !== expectedIssuer) {
+    throw new Error("FLASH_TRIPS_OIDC_ISSUER is not the exact tenant issuer");
+  }
   return {
     // External ID mirrors the requested host in the endpoints it returns, so
     // discovery must be asked on the subdomain the endpoints are trusted on.
@@ -84,21 +110,21 @@ function providerEnvironment(): {
       redirectUri: redirect.toString(),
       scope: `api://${clientId}/principal:read`,
     },
-    providerHostname,
+    providerOrigin: `https://${providerHostname}`,
   };
 }
 
 function endpoint(
   document: Record<string, unknown>,
   name: keyof DiscoveryDocument,
-  providerHostname: string,
+  providerOrigin: string,
 ): string {
   const value = document[name];
   if (typeof value !== "string") {
     throw new Error("OIDC discovery is invalid");
   }
   const url = new URL(value);
-  if (url.protocol !== "https:" || url.hostname !== providerHostname) {
+  if (url.protocol !== "https:" || url.origin !== providerOrigin) {
     throw new Error("OIDC discovery returned an untrusted endpoint");
   }
   return url.toString();
@@ -127,13 +153,13 @@ export async function loadProvider(
     authorizationEndpoint: endpoint(
       document,
       "authorization_endpoint",
-      configured.providerHostname,
+      configured.providerOrigin,
     ),
-    jwksUri: endpoint(document, "jwks_uri", configured.providerHostname),
+    jwksUri: endpoint(document, "jwks_uri", configured.providerOrigin),
     tokenEndpoint: endpoint(
       document,
       "token_endpoint",
-      configured.providerHostname,
+      configured.providerOrigin,
     ),
   };
 }

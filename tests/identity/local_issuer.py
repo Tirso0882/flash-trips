@@ -1,7 +1,9 @@
 import base64
 import datetime
+import hashlib
 import ipaddress
 import json
+import secrets
 import ssl
 import threading
 import time
@@ -10,6 +12,7 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import jwt
 from cryptography import x509
@@ -46,6 +49,8 @@ def _jwk(
 class _IssuerState:
     def __init__(self, private_key: rsa.RSAPrivateKey) -> None:
         self.keys = {KEY_ID: private_key}
+        self.authorization_codes: dict[str, dict[str, str]] = {}
+        self.issuer = ""
         self.unusable_keys: list[dict[str, str]] = []
         self.request_count = 0
         self.not_modified_count = 0
@@ -78,7 +83,21 @@ class _IssuerState:
 def _jwks_handler(state: _IssuerState) -> type[BaseHTTPRequestHandler]:
     class JwksHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
-            if self.path != JWKS_PATH:
+            request = urlparse(self.path)
+            if request.path == "/.well-known/openid-configuration":
+                self._write_json(
+                    {
+                        "authorization_endpoint": f"{state.issuer}/authorize",
+                        "issuer": state.issuer,
+                        "jwks_uri": f"{state.issuer}{JWKS_PATH}",
+                        "token_endpoint": f"{state.issuer}/token",
+                    }
+                )
+                return
+            if request.path == "/authorize":
+                self._authorize(parse_qs(request.query))
+                return
+            if request.path != JWKS_PATH:
                 self.send_error(404)
                 return
             state.request_count += 1
@@ -97,10 +116,128 @@ def _jwks_handler(state: _IssuerState) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(document)
 
+        def do_POST(self) -> None:
+            if self.path != "/token":
+                self.send_error(404)
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                self.send_error(400)
+                return
+            if length <= 0 or length > 16_384:
+                self.send_error(400)
+                return
+            form = parse_qs(self.rfile.read(length).decode())
+            code = _single_value(form, "code")
+            authorization = (
+                state.authorization_codes.pop(code, None) if code is not None else None
+            )
+            verifier = _single_value(form, "code_verifier")
+            if (
+                authorization is None
+                or verifier is None
+                or _single_value(form, "grant_type") != "authorization_code"
+                or _single_value(form, "client_id") != authorization["client_id"]
+                or _single_value(form, "redirect_uri") != authorization["redirect_uri"]
+                or _code_challenge(verifier) != authorization["code_challenge"]
+            ):
+                self._write_json({"error": "invalid_grant"}, status=400)
+                return
+
+            now = int(time.time())
+            common = {
+                "iss": state.issuer,
+                "sub": "local-subject",
+                "iat": now,
+                "nbf": now - 1,
+                "exp": now + 300,
+            }
+            headers = {"kid": KEY_ID, "typ": "JWT"}
+            access_token = jwt.encode(
+                {
+                    **common,
+                    "aud": authorization["client_id"],
+                    "scope": "principal:read",
+                },
+                state.keys[KEY_ID],
+                algorithm="RS256",
+                headers=headers,
+            )
+            id_token = jwt.encode(
+                {
+                    **common,
+                    "aud": authorization["client_id"],
+                    "nonce": authorization["nonce"],
+                },
+                state.keys[KEY_ID],
+                algorithm="RS256",
+                headers=headers,
+            )
+            self._write_json(
+                {
+                    "access_token": access_token,
+                    "id_token": id_token,
+                    "token_type": "Bearer",
+                }
+            )
+
+        def _authorize(self, query: Mapping[str, list[str]]) -> None:
+            required = {
+                name: _single_value(query, name)
+                for name in (
+                    "client_id",
+                    "code_challenge",
+                    "nonce",
+                    "redirect_uri",
+                    "state",
+                )
+            }
+            if (
+                any(value is None for value in required.values())
+                or _single_value(query, "code_challenge_method") != "S256"
+                or _single_value(query, "response_type") != "code"
+            ):
+                self.send_error(400)
+                return
+            authorization = {
+                name: value for name, value in required.items() if value is not None
+            }
+            code = secrets.token_urlsafe(32)
+            state.authorization_codes[code] = authorization
+            separator = "&" if "?" in authorization["redirect_uri"] else "?"
+            location = (
+                f"{authorization['redirect_uri']}{separator}"
+                f"{urlencode({'code': code, 'state': authorization['state']})}"
+            )
+            self.send_response(302)
+            self.send_header("Location", location)
+            self.end_headers()
+
+        def _write_json(
+            self, payload: Mapping[str, object], *, status: int = 200
+        ) -> None:
+            document = json.dumps(payload, sort_keys=True).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(document)))
+            self.end_headers()
+            self.wfile.write(document)
+
         def log_message(self, format: str, *args: object) -> None:
             del format, args
 
     return JwksHandler
+
+
+def _single_value(values: Mapping[str, list[str]], name: str) -> str | None:
+    entries = values.get(name)
+    return entries[0] if entries is not None and len(entries) == 1 else None
+
+
+def _code_challenge(verifier: str) -> str:
+    digest = hashlib.sha256(verifier.encode()).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
 
 
 class LocalOidcIssuer:
@@ -115,7 +252,10 @@ class LocalOidcIssuer:
         ca_file: Path,
     ) -> None:
         self.issuer = issuer
+        self.authorization_endpoint = f"{issuer}/authorize"
+        self.discovery_endpoint = f"{issuer}/.well-known/openid-configuration"
         self.jwks_uri = f"{issuer}{JWKS_PATH}"
+        self.token_endpoint = f"{issuer}/token"
         self.ca_file = ca_file
         self._private_key = private_key
         self._key_id = KEY_ID
@@ -208,6 +348,7 @@ def _write_tls_certificate(directory: Path, private_key: rsa.RSAPrivateKey) -> P
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - datetime.timedelta(minutes=1))
         .not_valid_after(now + datetime.timedelta(hours=1))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
         .add_extension(
             x509.SubjectAlternativeName(
                 [x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
@@ -241,18 +382,20 @@ def serving_local_oidc_issuer() -> Generator[LocalOidcIssuer]:
             ("127.0.0.1", 0),
             _jwks_handler(state),
         )
+        server.daemon_threads = True
         tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         tls_context.load_cert_chain(
             certfile=certificate_path,
             keyfile=Path(temporary_directory) / "issuer-private-key.pem",
         )
         server.socket = tls_context.wrap_socket(server.socket, server_side=True)
+        host, port = server.server_address[0], server.server_address[1]
+        state.issuer = f"https://{host}:{port}"
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            host, port = server.server_address[0], server.server_address[1]
             yield LocalOidcIssuer(
-                issuer=f"https://{host}:{port}",
+                issuer=state.issuer,
                 private_key=private_key,
                 state=state,
                 ca_file=certificate_path,

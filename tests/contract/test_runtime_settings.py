@@ -137,6 +137,41 @@ def test_environment_startup_rejects_more_than_one_allowlisted_identity(
         RuntimeSettings.from_environment()
 
 
+def test_journey_runtime_accepts_only_an_explicit_loopback_jwks_uri(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_documented_environment(monkeypatch)
+    monkeypatch.delenv("FLASH_TRIPS_OIDC_TENANT_ID", raising=False)
+    monkeypatch.delenv("FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN", raising=False)
+    monkeypatch.setenv("FLASH_TRIPS_OIDC_CLIENT_ID", "journey-client")
+    monkeypatch.setenv("FLASH_TRIPS_OIDC_ISSUER", "https://127.0.0.1:4317")
+    monkeypatch.setenv(
+        "FLASH_TRIPS_TEST_OIDC_JWKS_URI",
+        "https://127.0.0.1:4317/.well-known/jwks.json",
+    )
+
+    settings = RuntimeSettings.from_environment()
+
+    assert settings.oidc_jwks_uri.endswith("/.well-known/jwks.json")
+
+
+def test_journey_runtime_rejects_a_non_loopback_jwks_uri(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_documented_environment(monkeypatch)
+    monkeypatch.delenv("FLASH_TRIPS_OIDC_TENANT_ID", raising=False)
+    monkeypatch.delenv("FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN", raising=False)
+    monkeypatch.setenv("FLASH_TRIPS_OIDC_CLIENT_ID", "journey-client")
+    monkeypatch.setenv("FLASH_TRIPS_OIDC_ISSUER", "https://issuer.example")
+    monkeypatch.setenv(
+        "FLASH_TRIPS_TEST_OIDC_JWKS_URI",
+        "https://issuer.example/.well-known/jwks.json",
+    )
+
+    with pytest.raises(ValidationError, match="loopback"):
+        RuntimeSettings.from_environment()
+
+
 def test_jwks_fetch_policy_is_versioned_and_rejects_an_unbounded_refresh_rate() -> None:
     assert JwksFetchPolicy().version == 1
 

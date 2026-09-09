@@ -1,5 +1,6 @@
 import re
 from typing import Literal, Self
+from urllib.parse import urlparse
 from uuid import UUID
 
 from pydantic import (
@@ -71,6 +72,7 @@ class RuntimeSettings(BaseSettings):
     flash_trips_oidc_issuer: str | None = None
     flash_trips_oidc_tenant_id: str | None = None
     flash_trips_oidc_tenant_subdomain: str | None = None
+    flash_trips_test_oidc_jwks_uri: str | None = None
 
     @field_validator("live_call_allowance", mode="before")
     @classmethod
@@ -106,6 +108,31 @@ class RuntimeSettings(BaseSettings):
             self.flash_trips_oidc_tenant_id,
             self.flash_trips_oidc_tenant_subdomain,
         )
+        if self.flash_trips_test_oidc_jwks_uri is not None:
+            uri = urlparse(self.flash_trips_test_oidc_jwks_uri)
+            issuer = (
+                urlparse(self.flash_trips_oidc_issuer)
+                if self.flash_trips_oidc_issuer is not None
+                else None
+            )
+            if (
+                uri.scheme != "https"
+                or uri.hostname not in {"127.0.0.1", "localhost"}
+                or uri.username is not None
+                or uri.password is not None
+            ):
+                raise ValueError("test OIDC JWKS URI must be an HTTPS loopback URL")
+            if (
+                self.flash_trips_oidc_client_id is None
+                or not self.flash_trips_oidc_client_id.strip()
+                or issuer is None
+                or issuer.scheme != uri.scheme
+                or issuer.netloc != uri.netloc
+                or self.flash_trips_oidc_tenant_id is not None
+                or self.flash_trips_oidc_tenant_subdomain is not None
+            ):
+                raise ValueError("test OIDC verifier configuration is invalid")
+            return self
         if any(value is not None for value in oidc_values):
             if any(value is None or not value.strip() for value in oidc_values):
                 raise ValueError("OIDC verifier configuration must be complete")
@@ -125,6 +152,8 @@ class RuntimeSettings(BaseSettings):
 
     @property
     def oidc_jwks_uri(self) -> str:
+        if self.flash_trips_test_oidc_jwks_uri is not None:
+            return self.flash_trips_test_oidc_jwks_uri
         if self.flash_trips_oidc_tenant_subdomain is None:
             raise ValueError("OIDC verifier is not configured")
         subdomain = self.flash_trips_oidc_tenant_subdomain
