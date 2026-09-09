@@ -67,6 +67,7 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-03-01'
   name: environmentName
   location: location
   tags: tags
+  properties: {}
 }
 
 resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
