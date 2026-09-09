@@ -127,7 +127,10 @@ jobs:
           GITLEAKS_VERSION: 8.30.1
 
       - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install --yes ripgrep
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.*
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
 
       - name: Enable pnpm
         run: |
