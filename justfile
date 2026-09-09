@@ -35,6 +35,10 @@ security:
 journey:
     pnpm test:journey
 
+denial:
+    uv run pytest tests/security
+    pnpm test:web-boundaries
+
 test: journey
     uv run pytest
     pnpm test:acceptance

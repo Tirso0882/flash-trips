@@ -73,6 +73,28 @@ through the whole product lands first, then each station is deepened. Read that
 decision before declaring a blocking edge between Features or judging how much
 a single ticket should build.
 
+### Run the walking-skeleton journey locally
+
+Install the locked dependencies and Chromium once:
+
+```sh
+just install
+pnpm install:journey-browser
+```
+
+Then run both the owning-Planner journey and the second-Planner denial journey:
+
+```sh
+just journey
+```
+
+The journey harness starts a new `postgres:17-alpine` container on a random
+local port, migrates it, seeds two synthetic Planners, and starts local FastAPI,
+Next.js, and OIDC processes. It removes the container and temporary
+certificates when the run finishes. It does not use the database started by
+`docker compose`. Run `just denial` for the complete HTTP principal matrix and
+application-session revocation suite without starting the browser journey.
+
 ## Quality gates
 
 - `just format`: apply Python and web formatting
@@ -81,7 +103,9 @@ a single ticket should build.
 - `just contracts`: regenerate OpenAPI and `@flash-trips/api-client`
 - `just contracts-check`: fail when committed generated contracts drift
 - `just journey`: boot disposable PostgreSQL, FastAPI, Next.js, and the local
-  identity issuer, then run the browser journey
+  identity issuer, then run both Planner browser journeys
+- `just denial`: run the cross-Planner, unauthenticated, Operator, revoked, and
+  expired-session denial suites
 - `just test`: the journey plus contract, identity, persistence, and
   traceability tests
 - `just containers`: build both non-root OCI images

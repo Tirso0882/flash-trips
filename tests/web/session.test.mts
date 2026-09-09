@@ -124,9 +124,10 @@ test("the BFF forwards only the exact-audience access token to FastAPI", async (
   const plannerId = await resolvePlannerId(accessToken, fetcher);
 
   assert.equal(plannerId, "01991e28-1d65-7000-8000-000000000001");
-  assert.deepEqual([...observedHeaders], [
-    ["authorization", `Bearer ${accessToken}`],
-  ]);
+  assert.deepEqual(
+    [...observedHeaders],
+    [["authorization", `Bearer ${accessToken}`]],
+  );
 });
 
 test("authentication rotates an opaque identifier and retains tokens only server-side", async () => {
@@ -147,8 +148,14 @@ test("authentication rotates an opaque identifier and retains tokens only server
   assert.notEqual(first.cookieValue, second.cookieValue);
   assert.match(second.cookieValue, /^[A-Za-z0-9_-]{43}$/);
   assert.equal(JSON.stringify(second).includes(providerToken), false);
-  assert.equal(JSON.stringify(repository.sessions).includes(providerToken), false);
-  assert.equal(repository.sessions[0]?.revokedAt?.toISOString(), "2026-09-08T10:00:00.000Z");
+  assert.equal(
+    JSON.stringify(repository.sessions).includes(providerToken),
+    false,
+  );
+  assert.equal(
+    repository.sessions[0]?.revokedAt?.toISOString(),
+    "2026-09-08T10:00:00.000Z",
+  );
   assert.equal(
     repository.sessions.some((session) =>
       Buffer.from(session.identifierDigest).includes(
@@ -175,12 +182,18 @@ test("revocation and both expiry limits fail closed immediately", async () => {
   });
 
   assert.notEqual(
-    await sessions.authorize({ cookieValue: issued.cookieValue, method: "GET" }),
+    await sessions.authorize({
+      cookieValue: issued.cookieValue,
+      method: "GET",
+    }),
     null,
   );
   await sessions.revoke(issued.cookieValue);
   assert.equal(
-    await sessions.authorize({ cookieValue: issued.cookieValue, method: "GET" }),
+    await sessions.authorize({
+      cookieValue: issued.cookieValue,
+      method: "GET",
+    }),
     null,
   );
 
@@ -211,6 +224,61 @@ test("revocation and both expiry limits fail closed immediately", async () => {
     null,
   );
 });
+
+const protectedStations = [
+  { name: "Trip read", method: "GET" },
+  { name: "Trip list", method: "GET" },
+  { name: "Run start", method: "POST" },
+  { name: "Run read", method: "GET" },
+  { name: "Plan Revision read", method: "GET" },
+  { name: "Approval action", method: "POST" },
+  { name: "Handbook download", method: "GET" },
+] as const;
+
+const unusableSessionStates = [
+  "revoked",
+  "idle-expired",
+  "absolute-expired",
+] as const;
+
+for (const station of protectedStations) {
+  for (const state of unusableSessionStates) {
+    test(`${state} application session is denied on the next ${station.name}`, async () => {
+      const repository = new MemorySessions();
+      let now = new Date("2026-09-08T10:00:00Z");
+      const sessions = new ApplicationSessionManager({
+        allowedOrigins: new Set(["https://app.example"]),
+        clock: () => now,
+        digestKey,
+        repository,
+        tokenEncryptionKey: tokenKey,
+      });
+      const issued = await sessions.authenticate({
+        accessToken: "exact-audience-token",
+        plannerId: "01991e28-1d65-7000-8000-000000000001",
+      });
+      const stored = repository.sessions[0]!;
+
+      if (state === "revoked") {
+        await sessions.revoke(issued.cookieValue);
+      } else if (state === "idle-expired") {
+        now = new Date(stored.idleExpiresAt.getTime() + 1);
+      } else {
+        stored.idleExpiresAt = new Date("2026-09-16T10:00:00Z");
+        now = new Date(stored.absoluteExpiresAt.getTime() + 1);
+      }
+
+      const authorized = await sessions.authorize({
+        cookieValue: issued.cookieValue,
+        csrfToken: issued.csrfToken,
+        method: station.method,
+        origin: "https://app.example",
+      });
+
+      assert.equal(authorized, null);
+    });
+  }
+}
 
 test("the BFF sign-out clears its cookie and prevents replay", async () => {
   const repository = new MemorySessions();

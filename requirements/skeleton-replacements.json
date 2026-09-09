@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "verified_open_at": "2026-09-09",
+  "issues": [
+    {
+      "feature": "FT-03",
+      "issue": 204,
+      "state": "OPEN"
+    },
+    {
+      "feature": "FT-06",
+      "issue": 208,
+      "state": "OPEN"
+    },
+    {
+      "feature": "FT-14",
+      "issue": 216,
+      "state": "OPEN"
+    },
+    {
+      "feature": "FT-21",
+      "issue": 200,
+      "state": "OPEN"
+    },
+    {
+      "feature": "FT-22",
+      "issue": 220,
+      "state": "OPEN"
+    },
+    {
+      "feature": "FT-24",
+      "issue": 224,
+      "state": "OPEN"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "issue": 268,
+  "title": "Deny every station to a second Planner and an unauthenticated caller",
+  "outcome": "Every walking-skeleton station fails closed for foreign, unauthenticated, expired, revoked, and Operator principals without disclosing another Planner's resources.",
+  "checks": [
+    {
+      "name": "cross-Planner and unauthenticated denial matrix",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/security/test_cross_planner_denial.py"
+      ]
+    },
+    {
+      "name": "session revocation and skeleton replacement traceability",
+      "command": [
+        "pnpm",
+        "exec",
+        "node",
+        "--conditions=react-server",
+        "--import",
+        "./tests/node/deny-network.mjs",
+        "--import",
+        "tsx",
+        "--test",
+        "tests/web/session.test.mts",
+        "tests/traceability/skeleton-replacements.test.mjs"
+      ]
+    },
+    {
+      "name": "authorised and unauthorised browser journeys",
+      "command": ["pnpm", "test:journey"]
+    }
+  ]
+}

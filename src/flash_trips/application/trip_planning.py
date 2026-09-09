@@ -45,6 +45,7 @@ from .ports import ServiceStatusPort
 # SKELETON_REPLACEMENT: issue 216 (FT-14) deepens this thin Plan Revision station.
 # SKELETON_REPLACEMENT: issue 200 (FT-21) deepens this thin Approval station.
 # SKELETON_REPLACEMENT: issue 220 (FT-22) deepens this thin Handbook station.
+# SKELETON_REPLACEMENT: issue 224 (FT-24) deepens this thin Handbook delivery.
 
 
 class UnsupportedTripStructureError(ValueError):

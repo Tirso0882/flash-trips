@@ -11,6 +11,9 @@ const postgresPassword = "journey-postgres-only";
 const runtimePassword = "journey-runtime-only";
 const migrationPassword = "journey-migration-only";
 const plannerId = "01991e28-1d65-7000-8000-000000000001";
+const otherPlannerId = "01991e28-1d65-7000-8000-000000000002";
+export const otherPlannerTripId = "01991e28-1d65-7000-8000-000000000003";
+const otherPlannerStayId = "01991e28-1d65-7000-8000-000000000004";
 const localSubject = "local-subject";
 
 interface LocalProvider {
@@ -408,10 +411,27 @@ INSERT INTO planners (id, access_status)
 VALUES ('${plannerId}', 'Active');
 INSERT INTO external_identities (id, issuer, subject, planner_id)
 VALUES (
-  '01991e28-1d65-7000-8000-000000000002',
+  '01991e28-1d65-7000-8000-000000000005',
   '${sqlLiteral(provider.issuer)}',
   '${localSubject}',
   '${plannerId}'
+);
+INSERT INTO planners (id, access_status)
+VALUES ('${otherPlannerId}', 'Active');
+INSERT INTO trips (id, planner_id)
+VALUES ('${otherPlannerTripId}', '${otherPlannerId}');
+INSERT INTO trip_structures (
+  id, trip_id, planner_id, position, city, starts_on, ends_on, nights
+)
+VALUES (
+  '${otherPlannerStayId}',
+  '${otherPlannerTripId}',
+  '${otherPlannerId}',
+  0,
+  'Porto',
+  '2026-11-01',
+  '2026-11-04',
+  3
 );
 `);
     const [apiPort, webPort] = await Promise.all([freePort(), freePort()]);
@@ -482,9 +502,13 @@ VALUES (
       },
     );
     await waitForLocalHttps("Next.js", `${baseUrl}/planner`, webProcess);
+    process.env.FLASH_TRIPS_JOURNEY_POSTGRES_CONTAINER = database.containerName;
     return {
       baseUrl,
-      stop: cleanup,
+      stop: async () => {
+        delete process.env.FLASH_TRIPS_JOURNEY_POSTGRES_CONTAINER;
+        await cleanup();
+      },
     };
   } catch (error) {
     await cleanup();

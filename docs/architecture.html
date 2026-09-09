@@ -841,10 +841,21 @@
               <p>
                 The browser harness and its sign-in, Trip, Run, Plan Revision,
                 Approval, and Handbook download stations now exist in
-                <code>tests/journey/</code>. The journey and its Evaluation
-                Fixtures are permanent. The thin implementations are not, and
-                each carries an in-code marker naming the Feature that replaces
-                it.
+                <code>tests/journey/</code>. It seeds two synthetic Planners.
+                The positive journey completes every station, while the
+                unauthorised journey proves the second Planner is refused at the
+                first foreign station. The full matrix in
+                <code>tests/security/</code> covers unauthenticated and Operator
+                credentials plus indistinguishable foreign and missing
+                resources. Revoked and expired application sessions are
+                exercised at every BFF station by
+                <code>tests/journey/session-revocation.journey.mts</code> and
+                the session-manager matrix in <code>tests/web/</code>. This is
+                current behaviour established by ADR 0021. The journeys, denial
+                matrix, and Evaluation Fixtures are permanent. The thin
+                fixture-backed implementations are planned work, not complete
+                product depth, and each carries an in-code marker naming the
+                open <code>FT-*</code> Feature that replaces it.
               </p>
             </article>
           </div>
@@ -1401,7 +1412,7 @@
                 Required CI
               </text>
               <text class="svg-copy" x="775" y="466" text-anchor="middle">
-                quality, containers, traceability
+                quality, denial, journey, containers, traceability
               </text>
 
               <rect
@@ -1509,16 +1520,20 @@
             <code>.github/workflows/quality.yml</code> runs only after all CI
             jobs pass on the E-SKELETON Feature branch, updates both apps,
             migrates PostgreSQL, and smoke tests the public BFF boundary. The
-            complete test baseline and the production path shown below remain
-            deferred and unchanged.
+            deeper Feature implementation and the production path shown below
+            remain deferred and unchanged.
           </p>
           <p class="section-intro">
-            Pull requests and main run three CI jobs. The required quality job
-            scans Git history for secrets before running the repository checks
-            and web build. After successful main CI, a release plan continues
-            only when production image inputs changed. Release and deployment
-            use separate secretless GitHub OIDC identities with narrow Azure
-            roles.
+            Pull requests and main run five required CI checks. Dedicated
+            <code>denial</code> and <code>journey</code> checks protect the
+            negative and positive walking-skeleton paths. The
+            <code>quality</code> job depends on both, scans Git history for
+            secrets, then runs the complete repository checks and web build. The
+            other required checks are <code>containers</code> and
+            <code>traceability</code>. After successful main CI, a release plan
+            continues only when production image inputs changed. Release and
+            deployment use separate secretless GitHub OIDC identities with
+            narrow Azure roles.
           </p>
           <div class="diagram">
             <svg
