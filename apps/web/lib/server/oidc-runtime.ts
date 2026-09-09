@@ -71,7 +71,12 @@ function providerEnvironment(): {
 
   const clientId = requiredEnvironment("FLASH_TRIPS_OIDC_CLIENT_ID");
   return {
-    discoveryUrl: new URL(`${issuer}/.well-known/openid-configuration`),
+    // External ID mirrors the requested host in the endpoints it returns, so
+    // discovery must be asked on the subdomain the endpoints are trusted on.
+    // The issuer it reports stays the tenant-identifier form either way.
+    discoveryUrl: new URL(
+      `https://${providerHostname}/${tenantId}/v2.0/.well-known/openid-configuration`,
+    ),
     provider: {
       clientId,
       clientSecret: requiredEnvironment("FLASH_TRIPS_OIDC_CLIENT_SECRET"),
@@ -99,7 +104,7 @@ function endpoint(
   return url.toString();
 }
 
-async function loadProvider(
+export async function loadProvider(
   fetcher: typeof fetch = fetch,
 ): Promise<OidcProvider> {
   const configured = providerEnvironment();

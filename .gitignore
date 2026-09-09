@@ -9,6 +9,9 @@
 .secrets/
 *.log
 
+# Locally issued development TLS material for https://localhost
+apps/web/certificates/
+
 # Python environments and caches
 .venv/
 venv/

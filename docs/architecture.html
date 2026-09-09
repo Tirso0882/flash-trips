@@ -742,7 +742,12 @@
                 Capability and platform packages are currently empty package
                 markers. Planner and Operator pages are shells. The ADRs define
                 the intended planning workflow, persistence, evidence, approval,
-                reasoning, and handbook behavior.
+                reasoning, and handbook behavior. No
+                <code>Capability</code> contract exists yet; ADR 0021 places it
+                in <code>src/flash_trips/kernel/</code>, the only module both
+                <code>flash_trips.application</code> and
+                <code>flash_trips.capabilities</code> may import under
+                <code>.importlinter</code>.
               </p>
             </article>
             <article class="panel">
@@ -752,6 +757,29 @@
                 provider and model calls have zero authority. Production does
                 not currently provision PostgreSQL or inject application
                 secrets.
+              </p>
+            </article>
+            <article class="panel">
+              <h3>Delivery order</h3>
+              <p>
+                Feature work is sequenced by ADR 0021 rather than by finishing
+                each Feature before the next begins. E-SKELETON
+                (<a
+                  href="https://github.com/Tirso0882/flash-trips/issues/261"
+                  >issue 261</a
+                >) fills the architecture slots thinly first, in one chain of
+                seven Tasks, producing a browser-asserted path through sign-in,
+                Trip, Run, Plan Revision, Approval, and Handbook download with
+                fixture-backed results at every station. The
+                <code>FT-*</code> Features then deepen each station against a
+                running system and keep their existing registry ownership.
+              </p>
+              <p>
+                The journey test and its Evaluation Fixtures are permanent. The
+                thin implementations are not, and each carries an in-code
+                marker naming the Feature that replaces it. None of this exists
+                yet: no browser harness is present in the repository, and
+                <code>just test</code> currently runs only in-process tests.
               </p>
             </article>
           </div>
@@ -1613,19 +1641,6 @@
             Qualifying or manually requested releases rebuild both images from
             the selected main commit before publishing digests. The CI-built
             image objects themselves are not promoted.
-          </div>
-          <div class="callout">
-            <strong>Current release safety:</strong>
-            <code>scripts/production-deploy.sh</code> records the live digests,
-            updates both container apps, then smoke tests
-            <code>/api/status</code> through the public web app. A failing smoke
-            test re-pins the recorded digests, because
-            <code>infra/azure/main.bicep</code> sets Single active revision mode
-            and ingress traffic cannot be split. Rollback is skipped when the
-            only earlier digest is the Bicep placeholder or the failing digest,
-            and the job fails whenever the smoke test fails. Planned but absent:
-            the explicit migration step ADR 0016 requires, which arrives with
-            production PostgreSQL.
           </div>
         </section>
 
