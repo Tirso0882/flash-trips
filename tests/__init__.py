@@ -1,0 +1,1 @@
+"""Flash Trips test suite."""

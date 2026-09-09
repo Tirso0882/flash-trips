@@ -5,6 +5,71 @@ export type ClientOptions = {
 };
 
 /**
+ * CreateTripRequest
+ */
+export type CreateTripRequest = {
+    structure: TripStructureInput;
+};
+
+/**
+ * PlanClaimKind
+ */
+export type PlanClaimKind = 'travel_readiness';
+
+/**
+ * PlanClaimResponse
+ */
+export type PlanClaimResponse = {
+    /**
+     * Evidence Reference
+     */
+    evidence_reference: string;
+    /**
+     * Id
+     */
+    id: string;
+    kind: PlanClaimKind;
+    /**
+     * Observed At
+     */
+    observed_at: string;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * PlanRevisionResponse
+ */
+export type PlanRevisionResponse = {
+    /**
+     * Base Revision Id
+     */
+    base_revision_id: string | null;
+    /**
+     * Claims
+     */
+    claims: Array<PlanClaimResponse>;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Revision Number
+     */
+    revision_number: number;
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Trip Id
+     */
+    trip_id: string;
+};
+
+/**
  * PlannerPrincipalResponse
  */
 export type PlannerPrincipalResponse = {
@@ -35,6 +100,10 @@ export type ProblemResponse = {
      */
     retryable: boolean;
     /**
+     * Run Id
+     */
+    run_id?: string | null;
+    /**
      * Status
      */
     status: number;
@@ -47,6 +116,47 @@ export type ProblemResponse = {
      */
     type: string;
 };
+
+/**
+ * RunResponse
+ */
+export type RunResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    status: RunStatus;
+    terminal_outcome: RunTerminalOutcomeResponse | null;
+    /**
+     * Trip Id
+     */
+    trip_id: string;
+};
+
+/**
+ * RunStatus
+ */
+export type RunStatus = 'Running' | 'Succeeded' | 'Blocked' | 'Failed' | 'Cancelled';
+
+/**
+ * RunTerminalOutcomeResponse
+ */
+export type RunTerminalOutcomeResponse = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    status: RunTerminalStatus;
+};
+
+/**
+ * RunTerminalStatus
+ */
+export type RunTerminalStatus = 'Succeeded' | 'Blocked' | 'Failed' | 'Cancelled';
 
 /**
  * ServiceStatusResponse
@@ -64,6 +174,95 @@ export type ServiceStatusResponse = {
      * Status
      */
     status: 'ok';
+};
+
+/**
+ * TripListResponse
+ */
+export type TripListResponse = {
+    /**
+     * Items
+     */
+    items: Array<TripResponse>;
+};
+
+/**
+ * TripResponse
+ */
+export type TripResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    structure: TripStructureResponse;
+};
+
+/**
+ * TripStayInput
+ */
+export type TripStayInput = {
+    /**
+     * City
+     */
+    city: string;
+    /**
+     * Ends On
+     */
+    ends_on: string;
+    /**
+     * Nights
+     */
+    nights: number;
+    /**
+     * Starts On
+     */
+    starts_on: string;
+};
+
+/**
+ * TripStayResponse
+ */
+export type TripStayResponse = {
+    /**
+     * City
+     */
+    city: string;
+    /**
+     * Ends On
+     */
+    ends_on: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Nights
+     */
+    nights: number;
+    /**
+     * Starts On
+     */
+    starts_on: string;
+};
+
+/**
+ * TripStructureInput
+ */
+export type TripStructureInput = {
+    /**
+     * Stays
+     */
+    stays: Array<TripStayInput>;
+};
+
+/**
+ * TripStructureResponse
+ */
+export type TripStructureResponse = {
+    /**
+     * Stays
+     */
+    stays: Array<TripStayResponse>;
 };
 
 export type GetAuthenticatedPrincipalData = {
@@ -103,6 +302,52 @@ export type GetAuthenticatedPrincipalResponses = {
 
 export type GetAuthenticatedPrincipalResponse = GetAuthenticatedPrincipalResponses[keyof GetAuthenticatedPrincipalResponses];
 
+export type GetRunData = {
+    body?: never;
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: never;
+    url: '/api/v1/runs/{run_id}';
+};
+
+export type GetRunErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemResponse;
+    /**
+     * Forbidden
+     */
+    403: ProblemResponse;
+    /**
+     * Not Found
+     */
+    404: ProblemResponse;
+    /**
+     * Unprocessable Request
+     */
+    422: ProblemResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ProblemResponse;
+};
+
+export type GetRunError = GetRunErrors[keyof GetRunErrors];
+
+export type GetRunResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunResponse;
+};
+
+export type GetRunResponse = GetRunResponses[keyof GetRunResponses];
+
 export type GetServiceStatusData = {
     body?: never;
     path?: never;
@@ -131,3 +376,223 @@ export type GetServiceStatusResponses = {
 };
 
 export type GetServiceStatusResponse = GetServiceStatusResponses[keyof GetServiceStatusResponses];
+
+export type ListTripsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/trips';
+};
+
+export type ListTripsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemResponse;
+    /**
+     * Forbidden
+     */
+    403: ProblemResponse;
+    /**
+     * Not Found
+     */
+    404: ProblemResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ProblemResponse;
+};
+
+export type ListTripsError = ListTripsErrors[keyof ListTripsErrors];
+
+export type ListTripsResponses = {
+    /**
+     * Successful Response
+     */
+    200: TripListResponse;
+};
+
+export type ListTripsResponse = ListTripsResponses[keyof ListTripsResponses];
+
+export type CreateTripData = {
+    body: CreateTripRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/trips';
+};
+
+export type CreateTripErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemResponse;
+    /**
+     * Forbidden
+     */
+    403: ProblemResponse;
+    /**
+     * Not Found
+     */
+    404: ProblemResponse;
+    /**
+     * Unprocessable Request
+     */
+    422: ProblemResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ProblemResponse;
+};
+
+export type CreateTripError = CreateTripErrors[keyof CreateTripErrors];
+
+export type CreateTripResponses = {
+    /**
+     * Successful Response
+     */
+    201: TripResponse;
+};
+
+export type CreateTripResponse = CreateTripResponses[keyof CreateTripResponses];
+
+export type GetTripData = {
+    body?: never;
+    path: {
+        /**
+         * Trip Id
+         */
+        trip_id: string;
+    };
+    query?: never;
+    url: '/api/v1/trips/{trip_id}';
+};
+
+export type GetTripErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemResponse;
+    /**
+     * Forbidden
+     */
+    403: ProblemResponse;
+    /**
+     * Trip Not Found
+     */
+    404: ProblemResponse;
+    /**
+     * Unprocessable Request
+     */
+    422: ProblemResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ProblemResponse;
+};
+
+export type GetTripError = GetTripErrors[keyof GetTripErrors];
+
+export type GetTripResponses = {
+    /**
+     * Successful Response
+     */
+    200: TripResponse;
+};
+
+export type GetTripResponse = GetTripResponses[keyof GetTripResponses];
+
+export type GetCurrentPlanRevisionData = {
+    body?: never;
+    path: {
+        /**
+         * Trip Id
+         */
+        trip_id: string;
+    };
+    query?: never;
+    url: '/api/v1/trips/{trip_id}/plan-revision';
+};
+
+export type GetCurrentPlanRevisionErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemResponse;
+    /**
+     * Forbidden
+     */
+    403: ProblemResponse;
+    /**
+     * Plan Revision Not Found
+     */
+    404: ProblemResponse;
+    /**
+     * Unprocessable Request
+     */
+    422: ProblemResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ProblemResponse;
+};
+
+export type GetCurrentPlanRevisionError = GetCurrentPlanRevisionErrors[keyof GetCurrentPlanRevisionErrors];
+
+export type GetCurrentPlanRevisionResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlanRevisionResponse;
+};
+
+export type GetCurrentPlanRevisionResponse = GetCurrentPlanRevisionResponses[keyof GetCurrentPlanRevisionResponses];
+
+export type StartRunData = {
+    body?: never;
+    path: {
+        /**
+         * Trip Id
+         */
+        trip_id: string;
+    };
+    query?: never;
+    url: '/api/v1/trips/{trip_id}/runs';
+};
+
+export type StartRunErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemResponse;
+    /**
+     * Forbidden
+     */
+    403: ProblemResponse;
+    /**
+     * Not Found
+     */
+    404: ProblemResponse;
+    /**
+     * Conflict
+     */
+    409: ProblemResponse;
+    /**
+     * Unprocessable Request
+     */
+    422: ProblemResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ProblemResponse;
+};
+
+export type StartRunError = StartRunErrors[keyof StartRunErrors];
+
+export type StartRunResponses = {
+    /**
+     * Successful Response
+     */
+    202: RunResponse;
+};
+
+export type StartRunResponse = StartRunResponses[keyof StartRunResponses];

@@ -65,7 +65,7 @@ def test_migration_history_has_one_head_that_matches_the_mapped_models(
 ) -> None:
     heads = run_alembic("heads").stdout.strip().splitlines()
 
-    assert heads == ["0004_application_session (head)"]
+    assert heads == ["0007_plan_revision (head)"]
     run_alembic("check")
 
 
@@ -86,13 +86,42 @@ def test_planner_table_appears_on_upgrade_and_is_removed_on_rollback() -> None:
         run_alembic("upgrade", "head")
         with psycopg.connect(runtime_url) as connection, connection.cursor() as cursor:
             cursor.execute("SELECT version_num FROM alembic_version")
-            assert cursor.fetchone() == ("0004_application_session",)
+            assert cursor.fetchone() == ("0007_plan_revision",)
             cursor.execute("SELECT to_regclass('public.planners')")
             assert cursor.fetchone() == ("planners",)
             cursor.execute("SELECT to_regclass('public.external_identities')")
             assert cursor.fetchone() == ("external_identities",)
             cursor.execute("SELECT to_regclass('public.application_sessions')")
             assert cursor.fetchone() == ("application_sessions",)
+            cursor.execute("SELECT to_regclass('public.trips')")
+            assert cursor.fetchone() == ("trips",)
+            cursor.execute("SELECT to_regclass('public.trip_structures')")
+            assert cursor.fetchone() == ("trip_structures",)
+            cursor.execute("SELECT to_regclass('public.runs')")
+            assert cursor.fetchone() == ("runs",)
+            cursor.execute("SELECT to_regclass('public.plan_revisions')")
+            assert cursor.fetchone() == ("plan_revisions",)
+            cursor.execute("SELECT to_regclass('public.plan_claims')")
+            assert cursor.fetchone() == ("plan_claims",)
+
+        run_alembic("downgrade", "0006_run")
+        with psycopg.connect(runtime_url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT to_regclass('public.plan_revisions')")
+            assert cursor.fetchone() == (None,)
+            cursor.execute("SELECT to_regclass('public.plan_claims')")
+            assert cursor.fetchone() == (None,)
+
+        run_alembic("downgrade", "0005_trip")
+        with psycopg.connect(runtime_url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT to_regclass('public.runs')")
+            assert cursor.fetchone() == (None,)
+
+        run_alembic("downgrade", "0004_application_session")
+        with psycopg.connect(runtime_url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT to_regclass('public.trips')")
+            assert cursor.fetchone() == (None,)
+            cursor.execute("SELECT to_regclass('public.trip_structures')")
+            assert cursor.fetchone() == (None,)
 
         run_alembic("downgrade", "0003_external_identity")
         with psycopg.connect(runtime_url) as connection, connection.cursor() as cursor:

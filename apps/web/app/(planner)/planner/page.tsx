@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import TripStation from "./trip-station";
+
 interface PlannerPageProperties {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
@@ -18,6 +20,7 @@ export default async function PlannerPage({
         <p role="alert">Sign-in could not be completed. Please try again.</p>
       ) : null}
       <Link href="/api/auth/sign-in">Continue with Google</Link>
+      <TripStation />
     </main>
   );
 }

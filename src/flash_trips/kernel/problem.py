@@ -11,3 +11,4 @@ class Problem:
     code: str
     retryable: bool
     request_id: UUID
+    run_id: UUID | None = None

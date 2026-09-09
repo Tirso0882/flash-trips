@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "issue": 265,
+  "title": "Commit one immutable Plan Revision atomically",
+  "outcome": "A successful Run commits one evidence-backed immutable Plan Revision and the Planner workspace identifies the authoritative current revision.",
+  "checks": [
+    {
+      "name": "Plan Revision migration downgrade",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/persistence/test_planner_persistence.py::test_planner_table_appears_on_upgrade_and_is_removed_on_rollback"
+      ]
+    },
+    {
+      "name": "Plan Revision persistence and HTTP contracts",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/capabilities/test_fixture_capability.py",
+        "tests/contract/test_http_plan_revision.py",
+        "tests/contract/test_http_run.py",
+        "tests/persistence/test_plan_revision.py",
+        "tests/persistence/test_planner_persistence.py"
+      ]
+    },
+    {
+      "name": "hostile claim rendering",
+      "command": ["pnpm", "test:web-rendering"]
+    },
+    {
+      "name": "browser Plan Revision journey",
+      "command": ["pnpm", "test:journey"]
+    }
+  ]
+}

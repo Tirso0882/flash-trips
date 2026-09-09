@@ -33,6 +33,9 @@ dist/
 # Agent/skills files
 .agents/skills/
 
+# Machine-local Azure CLI state
+.azure-cli
+
 # Documentation and images
 docs/images/
 docs/personal-docs/

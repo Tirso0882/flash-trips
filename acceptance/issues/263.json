@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "issue": 263,
+  "title": "Create, reopen, and isolate a private Trip",
+  "outcome": "Created and reopened a collection-shaped private Trip through the Planner BFF with principal-scoped PostgreSQL ownership.",
+  "checks": [
+    {
+      "name": "Trip HTTP and PostgreSQL contracts",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/contract/test_http_trip.py",
+        "tests/persistence/test_trip_persistence.py",
+        "tests/persistence/test_planner_persistence.py"
+      ]
+    },
+    {
+      "name": "browser Trip journey",
+      "command": ["pnpm", "test:journey"]
+    }
+  ]
+}

@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - sandcastle/feature-261
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
@@ -16,7 +17,7 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       DATABASE_URL: postgresql+asyncpg://flash_trips_runtime:local-runtime-only@127.0.0.1:5432/flash_trips
       LIVE_CALL_ALLOWANCE: "0"
@@ -75,8 +76,14 @@ jobs:
       - name: Install locked dependencies
         run: just install
 
+      - name: Install the journey browser
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Establish separate database roles
         run: docker exec -i "${{ job.services.postgres.id }}" psql -U postgres -d flash_trips < scripts/postgres/init-local.sql
+
+      - name: Compile the walking-skeleton template offline
+        run: az bicep build --file infra/azure/skeleton.bicep --stdout > /dev/null
 
       - name: Run engineering quality gates
         run: just check
@@ -86,7 +93,10 @@ jobs:
 
   containers:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -133,6 +143,35 @@ jobs:
           test -s "$bff_response"
           cmp "$api_response" "$bff_response"
 
+      - name: Sign in for walking-skeleton image publication
+        if: >-
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/sandcastle/feature-261' &&
+          vars.AZURE_SKELETON_CLIENT_ID != ''
+        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac
+        with:
+          client-id: ${{ vars.AZURE_SKELETON_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Publish the tested walking-skeleton images
+        if: >-
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/sandcastle/feature-261' &&
+          vars.AZURE_SKELETON_CLIENT_ID != ''
+        env:
+          ACR_NAME: ${{ vars.AZURE_SKELETON_ACR_NAME }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          login_server="$(az acr show --name "$ACR_NAME" --query loginServer --output tsv)"
+          az acr login --name "$ACR_NAME"
+          api_image="$login_server/flash-trips-api:$RELEASE_SHA"
+          web_image="$login_server/flash-trips-web:$RELEASE_SHA"
+          docker tag flash-trips-api:test "$api_image"
+          docker tag flash-trips-web:test "$web_image"
+          docker push "$api_image"
+          docker push "$web_image"
+
   traceability:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -161,3 +200,148 @@ jobs:
 
       - name: Run negative validator tests
         run: pnpm test:traceability
+
+  walking-skeleton:
+    needs:
+      - containers
+      - quality
+      - traceability
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/sandcastle/feature-261' &&
+      vars.AZURE_SKELETON_CLIENT_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: walking-skeleton
+      url: https://${{ vars.AZURE_SKELETON_WEB_FQDN }}
+    steps:
+      - name: Check out the tested source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Sign in to the walking-skeleton subscription
+        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac
+        with:
+          client-id: ${{ vars.AZURE_SKELETON_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve the tested image tags
+        env:
+          ACR_NAME: ${{ vars.AZURE_SKELETON_ACR_NAME }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          login_server="$(az acr show --name "$ACR_NAME" --query loginServer --output tsv)"
+          api_image="$login_server/flash-trips-api:$RELEASE_SHA"
+          web_image="$login_server/flash-trips-web:$RELEASE_SHA"
+          printf 'API_IMAGE=%s\n' "$api_image" >> "$GITHUB_ENV"
+          printf 'WEB_IMAGE=%s\n' "$web_image" >> "$GITHUB_ENV"
+
+      - name: Configure and update the internal API
+        env:
+          API_APP_NAME: ${{ vars.AZURE_SKELETON_API_APP_NAME }}
+          DATABASE_URL: ${{ secrets.AZURE_SKELETON_DATABASE_URL }}
+          EXTERNAL_IDENTITY_SUBJECT: ${{ secrets.AZURE_SKELETON_EXTERNAL_IDENTITY_SUBJECT }}
+          OIDC_CLIENT_ID: ${{ vars.FLASH_TRIPS_OIDC_CLIENT_ID }}
+          OIDC_ISSUER: ${{ vars.FLASH_TRIPS_OIDC_ISSUER }}
+          OIDC_TENANT_ID: ${{ vars.FLASH_TRIPS_OIDC_TENANT_ID }}
+          OIDC_TENANT_SUBDOMAIN: ${{ vars.FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN }}
+          RESOURCE_GROUP: ${{ vars.AZURE_SKELETON_RESOURCE_GROUP }}
+        run: |
+          allowlist="$(jq -cn \
+            --arg issuer "$OIDC_ISSUER" \
+            --arg subject "$EXTERNAL_IDENTITY_SUBJECT" \
+            '[{issuer: $issuer, subject: $subject}]')"
+          az containerapp secret set \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$API_APP_NAME" \
+            --secrets \
+              database-url="$DATABASE_URL" \
+              external-identity-allowlist="$allowlist" > /dev/null
+          az containerapp update \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$API_APP_NAME" \
+            --image "$API_IMAGE" \
+            --replace-env-vars \
+              DATABASE_URL=secretref:database-url \
+              MIGRATION_DATABASE_URL=secretref:database-url \
+              EXTERNAL_IDENTITY_ALLOWLIST=secretref:external-identity-allowlist \
+              FLASH_TRIPS_OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
+              FLASH_TRIPS_OIDC_ISSUER="$OIDC_ISSUER" \
+              FLASH_TRIPS_OIDC_TENANT_ID="$OIDC_TENANT_ID" \
+              FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN="$OIDC_TENANT_SUBDOMAIN" \
+              LIVE_CALL_ALLOWANCE=0 > /dev/null
+
+      - name: Migrate the walking-skeleton database
+        env:
+          API_APP_NAME: ${{ vars.AZURE_SKELETON_API_APP_NAME }}
+          RESOURCE_GROUP: ${{ vars.AZURE_SKELETON_RESOURCE_GROUP }}
+        run: |
+          for attempt in $(seq 1 20); do
+            if az containerapp exec \
+              --resource-group "$RESOURCE_GROUP" \
+              --name "$API_APP_NAME" \
+              --command "alembic upgrade head"; then
+              exit 0
+            fi
+            test "$attempt" -lt 20
+            sleep 5
+          done
+
+      - name: Configure and update the public web app
+        env:
+          API_FQDN: ${{ vars.AZURE_SKELETON_API_FQDN }}
+          DATABASE_URL: ${{ secrets.AZURE_SKELETON_DATABASE_URL }}
+          OIDC_CLIENT_ID: ${{ vars.FLASH_TRIPS_OIDC_CLIENT_ID }}
+          OIDC_CLIENT_SECRET: ${{ secrets.FLASH_TRIPS_OIDC_CLIENT_SECRET }}
+          OIDC_ISSUER: ${{ vars.FLASH_TRIPS_OIDC_ISSUER }}
+          OIDC_TENANT_ID: ${{ vars.FLASH_TRIPS_OIDC_TENANT_ID }}
+          OIDC_TENANT_SUBDOMAIN: ${{ vars.FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN }}
+          RESOURCE_GROUP: ${{ vars.AZURE_SKELETON_RESOURCE_GROUP }}
+          SESSION_DIGEST_KEY: ${{ secrets.AZURE_SKELETON_SESSION_DIGEST_KEY }}
+          SESSION_TOKEN_KEY: ${{ secrets.AZURE_SKELETON_SESSION_TOKEN_KEY }}
+          WEB_APP_NAME: ${{ vars.AZURE_SKELETON_WEB_APP_NAME }}
+          WEB_FQDN: ${{ vars.AZURE_SKELETON_WEB_FQDN }}
+        run: |
+          az containerapp secret set \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$WEB_APP_NAME" \
+            --secrets \
+              database-url="$DATABASE_URL" \
+              oidc-client-secret="$OIDC_CLIENT_SECRET" \
+              session-digest-key="$SESSION_DIGEST_KEY" \
+              session-token-key="$SESSION_TOKEN_KEY" > /dev/null
+          az containerapp update \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$WEB_APP_NAME" \
+            --image "$WEB_IMAGE" \
+            --replace-env-vars \
+              DATABASE_URL=secretref:database-url \
+              FLASH_TRIPS_ALLOWED_ORIGINS="https://$WEB_FQDN" \
+              FLASH_TRIPS_API_BASE_URL="https://$API_FQDN" \
+              FLASH_TRIPS_OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
+              FLASH_TRIPS_OIDC_CLIENT_SECRET=secretref:oidc-client-secret \
+              FLASH_TRIPS_OIDC_ISSUER="$OIDC_ISSUER" \
+              FLASH_TRIPS_OIDC_REDIRECT_URI="https://$WEB_FQDN/api/auth/callback" \
+              FLASH_TRIPS_OIDC_TENANT_ID="$OIDC_TENANT_ID" \
+              FLASH_TRIPS_OIDC_TENANT_SUBDOMAIN="$OIDC_TENANT_SUBDOMAIN" \
+              FLASH_TRIPS_SESSION_DIGEST_KEY=secretref:session-digest-key \
+              FLASH_TRIPS_SESSION_TOKEN_KEY=secretref:session-token-key > /dev/null
+
+      - name: Smoke test the hosted BFF boundary
+        env:
+          SKELETON_URL: https://${{ vars.AZURE_SKELETON_WEB_FQDN }}
+        run: |
+          response="$(mktemp)"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error \
+              "$SKELETON_URL/api/status" > "$response"; then
+              test -s "$response"
+              exit 0
+            fi
+            test "$attempt" -lt 30
+            sleep 10
+          done
