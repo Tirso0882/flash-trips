@@ -103,6 +103,16 @@ async def http_problem(request: Request, error: Exception) -> JSONResponse:
             retryable=False,
             request_id=request.state.request_id,
         )
+    elif error.status_code == 404 and error.detail == "approval_not_found":
+        problem = Problem(
+            type="https://flash-trips.example/problems/approval-not-found",
+            title="Not Found",
+            status=404,
+            detail="The Approval Request was not found.",
+            code="approval_not_found",
+            retryable=False,
+            request_id=request.state.request_id,
+        )
     elif error.status_code == 409 and active_run_id is not None:
         problem = Problem(
             type="https://flash-trips.example/problems/active-run-exists",
@@ -113,6 +123,16 @@ async def http_problem(request: Request, error: Exception) -> JSONResponse:
             retryable=False,
             request_id=request.state.request_id,
             run_id=active_run_id,
+        )
+    elif error.status_code == 409 and error.detail == "approval_already_recorded":
+        problem = Problem(
+            type="https://flash-trips.example/problems/approval-already-recorded",
+            title="Approval Already Recorded",
+            status=409,
+            detail="This Approval Request has already been approved.",
+            code="approval_already_recorded",
+            retryable=False,
+            request_id=request.state.request_id,
         )
     elif error.status_code == 404:
         problem = Problem(

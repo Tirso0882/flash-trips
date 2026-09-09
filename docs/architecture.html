@@ -684,8 +684,8 @@
                 Google OIDC Authorization Code with PKCE BFF routes, opaque
                 revocable application sessions, private Trip create/list/read
                 through the Planner UI and BFF, principal-scoped Trip
-                persistence, generated contracts, the browser journey,
-                container smoke tests, CI, and Azure delivery.
+                persistence, generated contracts, the browser journey, container
+                smoke tests, CI, and Azure delivery.
               </p>
             </article>
             <article class="panel">
@@ -694,19 +694,19 @@
                 <code>JwtAccessTokenVerifier</code> in
                 <code>src/flash_trips/adapters/identity/access_tokens.py</code>
                 verifies signed access tokens against an issuer, audience,
-                access-token claim contract, required scope, asymmetric algorithm
-                allowlist, and served JWKS. It also rejects a token carrying
-                ID-token claims. JWKS retrieval uses only the configured HTTPS
-                destination, bounded by the versioned
+                access-token claim contract, required scope, asymmetric
+                algorithm allowlist, and served JWKS. It also rejects a token
+                carrying ID-token claims. JWKS retrieval uses only the
+                configured HTTPS destination, bounded by the versioned
                 <code>JwksFetchPolicy</code> in
                 <code>src/flash_trips/adapters/config.py</code> for timeout,
                 response size, cache lifetime, and refresh rate. Rotation
                 replaces retired cached keys, while neither an unknown key ID
                 nor a failing issuer can refetch faster than that refresh
-                interval. These boundaries are proven
-                against the deterministic TLS local issuer in
-                <code>tests/identity/</code>. When the complete Entra
-                environment is present, <code>create_runtime_app</code>
+                interval. These boundaries are proven against the deterministic
+                TLS local issuer in <code>tests/identity/</code>. When the
+                complete Entra environment is present,
+                <code>create_runtime_app</code>
                 composes this verifier with the exact tenant issuer, client
                 audience, and tenant JWKS. Missing provider configuration
                 retains the fail-closed
@@ -718,42 +718,41 @@
                 issuer and subject pair from
                 <code>external_identities</code> to an active Planner. The
                 runtime composition validates the configured single-entry
-                allowlist and connects that resolver to the protected route.
-                The linear, reversible Alembic history
-                also creates <code>application_sessions</code>, which stores
-                only a keyed digest of each opaque browser identifier and an
-                encrypted exact-audience access token. The BFF session manager
-                in <code>apps/web/lib/server/session.ts</code> enforces idle
-                and absolute expiry, revocation, origin validation, and
+                allowlist and connects that resolver to the protected route. The
+                linear, reversible Alembic history also creates
+                <code>application_sessions</code>, which stores only a keyed
+                digest of each opaque browser identifier and an encrypted
+                exact-audience access token. The BFF session manager in
+                <code>apps/web/lib/server/session.ts</code> enforces idle and
+                absolute expiry, revocation, origin validation, and
                 session-bound CSRF. It reaches that table over its own
                 PostgreSQL connection from
                 <code>apps/web/lib/server/session-runtime.ts</code> rather than
                 through FastAPI, so the web process needs
                 <code>DATABASE_URL</code> as well as the API base URL. The auth
                 sign-in, callback, session, and sign-out routes use the shared
-                cookie policy. The callback validates an encrypted,
-                short-lived state, nonce, PKCE verifier, exact redirect, token
-                response, and signed ID token before creating the application
-                session. Provider tokens never enter the browser. The JSON
-                logger, Key Vault access, and
-                Application Insights resources are not connected.
+                cookie policy. The callback validates an encrypted, short-lived
+                state, nonce, PKCE verifier, exact redirect, token response, and
+                signed ID token before creating the application session.
+                Provider tokens never enter the browser. The JSON logger, Key
+                Vault access, and Application Insights resources are not
+                connected.
               </p>
               <p>
                 <code>src/flash_trips/application/trip_planning.py</code> owns
                 Trip create, list, and read use cases through the
-                principal-scoped <code>UnitOfWork</code>. The PostgreSQL
-                adapter stores the ownership root in <code>trips</code> and
-                each ordered city stay in <code>trip_structures</code>. Both
-                carry the owning Planner reference. FastAPI exposes
-                <code>/api/v1/trips</code>, and
-                <code>apps/web/app/api/trips/route.ts</code> forwards only the
-                server-held access token after application-session and CSRF
+                principal-scoped <code>UnitOfWork</code>. The PostgreSQL adapter
+                stores the ownership root in <code>trips</code> and each ordered
+                city stay in <code>trip_structures</code>. Both carry the owning
+                Planner reference. FastAPI exposes <code>/api/v1/trips</code>,
+                and <code>apps/web/app/api/trips/route.ts</code> forwards only
+                the server-held access token after application-session and CSRF
                 checks. Foreign and absent Trip identifiers return the same
                 problem response.
               </p>
               <p>
-                The same application interface starts and reads
-                principal-scoped Runs. PostgreSQL stores each Run in
+                The same application interface starts and reads principal-scoped
+                Runs. PostgreSQL stores each Run in
                 <code>runs</code>, seals its first terminal outcome, and uses a
                 partial unique index to allow only one active mutating Run per
                 Trip.
@@ -767,9 +766,21 @@
                 read operations only. The mutable
                 <code>trips.current_plan_revision_id</code> head changes in the
                 same transaction. PostgreSQL rejects updates to both immutable
-                tables and permits at most one revision per Run.
-                FastAPI exposes the authoritative current snapshot at
+                tables and permits at most one revision per Run. FastAPI exposes
+                the authoritative current snapshot at
                 <code>/api/v1/trips/{trip_id}/plan-revision</code>.
+              </p>
+              <p>
+                Committing that revision also presents one immutable
+                <code>approval_requests</code> record through the
+                <code>ApprovalRepository</code>. The versioned Approval command
+                accepts only an Approval Request identifier paired with its
+                exact Plan Revision identifier. PostgreSQL rechecks the owning
+                Planner and current revision before inserting one immutable
+                <code>approvals</code> record. Missing, foreign, mismatched, and
+                superseded bindings all fail as the same typed not-found
+                problem. The Next.js BFF requires the session-bound CSRF token
+                before forwarding the bound action.
               </p>
             </article>
             <article class="panel">
@@ -778,11 +789,11 @@
                 The kernel now owns the typed <code>Capability</code> contract,
                 and Travel Readiness contains the one fixture-backed skeleton
                 implementation. The other Capability and platform packages
-                remain empty package markers. The Planner page contains the
-                thin Trip, Run, and Plan Revision stations; the Operator page
-                remains a shell.
-                The contract stays in <code>src/flash_trips/kernel/</code>, the
-                only module both <code>flash_trips.application</code> and
+                remain empty package markers. The Planner page contains the thin
+                Trip, Run, Plan Revision, and Approval stations; the Operator
+                page remains a shell. The contract stays in
+                <code>src/flash_trips/kernel/</code>, the only module both
+                <code>flash_trips.application</code> and
                 <code>flash_trips.capabilities</code> may import under
                 <code>.importlinter</code>.
               </p>
@@ -800,8 +811,7 @@
               <h3>Delivery order</h3>
               <p>
                 Feature work is sequenced by ADR 0021 rather than by finishing
-                each Feature before the next begins. E-SKELETON
-                (<a
+                each Feature before the next begins. E-SKELETON (<a
                   href="https://github.com/Tirso0882/flash-trips/issues/261"
                   >issue 261</a
                 >) fills the architecture slots thinly first, in one chain of
@@ -812,11 +822,12 @@
                 running system and keep their existing registry ownership.
               </p>
               <p>
-                The browser harness and its sign-in, Trip, Run, and Plan
-                Revision stations now exist in <code>tests/journey/</code>.
-                The journey and its Evaluation Fixtures are permanent. The
-                thin implementations are not, and each carries an in-code
-                marker naming the Feature that replaces it.
+                The browser harness and its sign-in, Trip, Run, Plan Revision,
+                and Approval stations now exist in
+                <code>tests/journey/</code>. The journey and its Evaluation
+                Fixtures are permanent. The thin implementations are not, and
+                each carries an in-code marker naming the Feature that replaces
+                it.
               </p>
             </article>
           </div>
@@ -1462,11 +1473,11 @@
             <code>agent:autopilot</code> to a Feature authorizes repeated Task
             claims, spending, branch publication, and pull-request updates.
             Remove it to stop new claims. An already claimed Task finishes.
-            Interruptions before review still block the Task for inspection.
-            An empty implementer exit is not retried automatically.
-            Reviewed and integrated checkpoints remain
-            <code>agent:in-progress</code> so the next run can resume without
-            paying for implementation or review again.
+            Interruptions before review still block the Task for inspection. An
+            empty implementer exit is not retried automatically. Reviewed and
+            integrated checkpoints remain <code>agent:in-progress</code> so the
+            next run can resume without paying for implementation or review
+            again.
           </div>
         </section>
 
@@ -1474,10 +1485,10 @@
           <h2>CI and Azure production</h2>
           <p class="section-intro">
             During E-SKELETON, T-01 adds a separate disposable Azure feedback
-            environment from <code>infra/azure/skeleton.bicep</code>. It
-            exposes the web/BFF over HTTPS, keeps FastAPI internal, uses one
-            low-cost PostgreSQL server, and grants no model or travel-provider
-            authority. The <code>walking-skeleton</code> job in
+            environment from <code>infra/azure/skeleton.bicep</code>. It exposes
+            the web/BFF over HTTPS, keeps FastAPI internal, uses one low-cost
+            PostgreSQL server, and grants no model or travel-provider authority.
+            The <code>walking-skeleton</code> job in
             <code>.github/workflows/quality.yml</code> runs only after all CI
             jobs pass on the E-SKELETON Feature branch, updates both apps,
             migrates PostgreSQL, and smoke tests the public BFF boundary. The

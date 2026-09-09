@@ -57,9 +57,9 @@ test("a Planner signs in and reaches an authenticated Planner surface", async ({
   );
 
   await page.getByRole("button", { name: "Start Run for Lisbon" }).click();
-  await expect(page.getByRole("status", { name: "Run for Lisbon" })).toContainText(
-    "Succeeded",
-  );
+  await expect(
+    page.getByRole("status", { name: "Run for Lisbon" }),
+  ).toContainText("Succeeded");
   const planRevision = page.getByRole("region", { name: "Plan Revision 1" });
   await expect(planRevision).toContainText(
     "No fixture Travel Readiness concerns were found for Lisbon.",
@@ -69,11 +69,23 @@ test("a Planner signs in and reaches an authenticated Planner surface", async ({
     /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
   );
 
+  const approvalRequest = page.getByRole("region", {
+    name: "Approval Request for Plan Revision 1",
+  });
+  await expect(approvalRequest).toContainText(revisionIdentifier!);
+  await page.getByRole("button", { name: "Approve Plan Revision 1" }).click();
+  await expect(
+    page.getByRole("status", { name: "Approval for Plan Revision 1" }),
+  ).toContainText(revisionIdentifier!);
+
   await page.reload();
   await expect(page.getByRole("list", { name: "Saved Trips" })).toContainText(
     tripIdentifier!,
   );
   await expect(
     page.getByRole("region", { name: "Plan Revision 1" }),
+  ).toContainText(revisionIdentifier!);
+  await expect(
+    page.getByRole("status", { name: "Approval for Plan Revision 1" }),
   ).toContainText(revisionIdentifier!);
 });

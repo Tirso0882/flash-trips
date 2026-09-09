@@ -1,6 +1,86 @@
 {
   "components": {
     "schemas": {
+      "ApprovalRequestResponse": {
+        "properties": {
+          "approval_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "plan_revision_id": {
+            "format": "uuid",
+            "title": "Plan Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "plan_revision_id",
+          "approval_id"
+        ],
+        "title": "ApprovalRequestResponse",
+        "type": "object"
+      },
+      "ApprovalResponse": {
+        "properties": {
+          "approval_request_id": {
+            "format": "uuid",
+            "title": "Approval Request Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "plan_revision_id": {
+            "format": "uuid",
+            "title": "Plan Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "approval_request_id",
+          "plan_revision_id"
+        ],
+        "title": "ApprovalResponse",
+        "type": "object"
+      },
+      "BoundApprovalActionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_request_id": {
+            "format": "uuid",
+            "title": "Approval Request Id",
+            "type": "string"
+          },
+          "plan_revision_id": {
+            "format": "uuid",
+            "title": "Plan Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approval_request_id",
+          "plan_revision_id"
+        ],
+        "title": "BoundApprovalActionRequest",
+        "type": "object"
+      },
       "CreateTripRequest": {
         "properties": {
           "structure": {
@@ -431,6 +511,99 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/approvals": {
+      "post": {
+        "operationId": "approvePlanRevision",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BoundApprovalActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Approval Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Approval Already Recorded"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Approve Plan Revision"
+      }
+    },
     "/api/v1/authenticated-principal": {
       "get": {
         "operationId": "getAuthenticatedPrincipal",
@@ -844,6 +1017,101 @@
           }
         ],
         "summary": "Get Trip"
+      }
+    },
+    "/api/v1/trips/{trip_id}/approval-request": {
+      "get": {
+        "operationId": "getCurrentApprovalRequest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trip_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Trip Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Approval Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Approval Already Recorded"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Current Approval Request"
       }
     },
     "/api/v1/trips/{trip_id}/plan-revision": {

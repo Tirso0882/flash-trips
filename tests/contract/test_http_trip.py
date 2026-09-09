@@ -7,6 +7,10 @@ import pytest
 from httpx import ASGITransport, AsyncClient, Response
 
 from flash_trips.application import (
+    ApprovalRecord,
+    ApprovalRepository,
+    ApprovalRequestRecord,
+    BoundApprovalAction,
     PlannerPrincipal,
     PlannerRecord,
     PlannerRepository,
@@ -110,16 +114,40 @@ class UnusedPlanRevisionRepository:
         return None
 
 
+@dataclass(frozen=True, slots=True)
+class UnusedApprovalRepository:
+    async def present(self, request: ApprovalRequestRecord) -> None:
+        del request
+        raise AssertionError("Approval persistence is not used by Trip HTTP tests")
+
+    async def get_request(
+        self,
+        plan_revision_id: UUID,
+    ) -> ApprovalRequestRecord | None:
+        del plan_revision_id
+        return None
+
+    async def approve(self, action: BoundApprovalAction) -> ApprovalRecord:
+        del action
+        raise AssertionError("Approval persistence is not used by Trip HTTP tests")
+
+    async def get_approval(self, plan_revision_id: UUID) -> ApprovalRecord | None:
+        del plan_revision_id
+        return None
+
+
 @dataclass(slots=True)
 class MemoryUnitOfWork:
     principal: PlannerPrincipal
     records: list[TripRecord]
+    approvals: ApprovalRepository = field(init=False)
     planners: PlannerRepository = field(init=False)
     plan_revisions: PlanRevisionRepository = field(init=False)
     runs: RunRepository = field(init=False)
     trips: TripRepository = field(init=False)
 
     def __post_init__(self) -> None:
+        self.approvals = UnusedApprovalRepository()
         self.planners = UnusedPlannerRepository()
         self.plan_revisions = UnusedPlanRevisionRepository()
         self.runs = UnusedRunRepository()

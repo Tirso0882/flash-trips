@@ -156,7 +156,61 @@ class PlanRevisionRepository(Protocol):
     async def get_current(self, trip_id: UUID) -> PlanRevisionRecord | None: ...
 
 
+@dataclass(frozen=True, slots=True)
+class ApprovalRequestRecord:
+    """One immutable decision presented for an exact Plan Revision."""
+
+    id: UUID
+    planner_id: UUID
+    plan_revision_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class BoundApprovalAction:
+    """A typed Approval action bound to its request and subject."""
+
+    approval_request_id: UUID
+    plan_revision_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalRecord:
+    """A Planner's recorded Approval of one exact request and revision."""
+
+    id: UUID
+    planner_id: UUID
+    approval_request_id: UUID
+    plan_revision_id: UUID
+
+
+class ApprovalNotFoundError(LookupError):
+    pass
+
+
+class ApprovalAlreadyRecordedError(RuntimeError):
+    pass
+
+
+class ApprovalRepository(Protocol):
+    async def present(self, request: ApprovalRequestRecord) -> None: ...
+
+    async def get_request(
+        self,
+        plan_revision_id: UUID,
+    ) -> ApprovalRequestRecord | None: ...
+
+    async def approve(self, action: BoundApprovalAction) -> ApprovalRecord: ...
+
+    async def get_approval(
+        self,
+        plan_revision_id: UUID,
+    ) -> ApprovalRecord | None: ...
+
+
 class UnitOfWork(Protocol):
+    @property
+    def approvals(self) -> ApprovalRepository: ...
+
     @property
     def planners(self) -> PlannerRepository: ...
 

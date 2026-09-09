@@ -168,6 +168,7 @@ class PlanRevisionModel(PostgresBase):
             ],
             ondelete="RESTRICT",
         ),
+        UniqueConstraint("id", "planner_id"),
         UniqueConstraint("id", "trip_id", "planner_id"),
         UniqueConstraint("trip_id", "revision_number"),
         UniqueConstraint("run_id"),
@@ -227,6 +228,72 @@ class PlanClaimModel(PostgresBase):
     observed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
+    )
+
+
+class ApprovalRequestModel(PostgresBase):
+    __tablename__ = "approval_requests"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["plan_revision_id", "planner_id"],
+            ["plan_revisions.id", "plan_revisions.planner_id"],
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "plan_revision_id", "planner_id"),
+        UniqueConstraint("plan_revision_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    planner_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("planners.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    plan_revision_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        nullable=False,
+        index=True,
+    )
+
+
+class ApprovalModel(PostgresBase):
+    __tablename__ = "approvals"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["plan_revision_id", "planner_id"],
+            ["plan_revisions.id", "plan_revisions.planner_id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["approval_request_id", "plan_revision_id", "planner_id"],
+            [
+                "approval_requests.id",
+                "approval_requests.plan_revision_id",
+                "approval_requests.planner_id",
+            ],
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("approval_request_id"),
+        UniqueConstraint("plan_revision_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    planner_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("planners.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    approval_request_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        nullable=False,
+        index=True,
+    )
+    plan_revision_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        nullable=False,
+        index=True,
     )
 
 

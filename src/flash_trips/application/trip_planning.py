@@ -15,6 +15,9 @@ from flash_trips.kernel.identifiers import uuid7
 from flash_trips.kernel.service_status import ServiceStatus
 
 from .persistence import (
+    ApprovalRecord,
+    ApprovalRequestRecord,
+    BoundApprovalAction,
     PlanClaimKind,
     PlanClaimRecord,
     PlannerPrincipal,
@@ -32,6 +35,7 @@ from .ports import ServiceStatusPort
 
 # SKELETON_REPLACEMENT: issue 204 (FT-03) deepens this thin Trip station.
 # SKELETON_REPLACEMENT: issue 216 (FT-14) deepens this thin Plan Revision station.
+# SKELETON_REPLACEMENT: issue 200 (FT-21) deepens this thin Approval station.
 
 
 class UnsupportedTripStructureError(ValueError):
@@ -156,25 +160,31 @@ class TripPlanning:
             if isinstance(capability_outcome, CapabilityComplete):
                 current = await unit_of_work.plan_revisions.get_current(trip.id)
                 result = capability_outcome.value
-                await unit_of_work.plan_revisions.commit(
-                    PlanRevisionRecord(
+                revision = PlanRevisionRecord(
+                    id=uuid7(),
+                    planner_id=principal.planner_id,
+                    trip_id=trip.id,
+                    run_id=run.id,
+                    revision_number=(
+                        current.revision_number + 1 if current is not None else 1
+                    ),
+                    base_revision_id=current.id if current is not None else None,
+                    claims=(
+                        PlanClaimRecord(
+                            id=uuid7(),
+                            kind=PlanClaimKind.TRAVEL_READINESS,
+                            text=result.summary,
+                            evidence_reference=result.evidence_references[0],
+                            observed_at=result.observed_at,
+                        ),
+                    ),
+                )
+                await unit_of_work.plan_revisions.commit(revision)
+                await unit_of_work.approvals.present(
+                    ApprovalRequestRecord(
                         id=uuid7(),
                         planner_id=principal.planner_id,
-                        trip_id=trip.id,
-                        run_id=run.id,
-                        revision_number=(
-                            current.revision_number + 1 if current is not None else 1
-                        ),
-                        base_revision_id=current.id if current is not None else None,
-                        claims=(
-                            PlanClaimRecord(
-                                id=uuid7(),
-                                kind=PlanClaimKind.TRAVEL_READINESS,
-                                text=result.summary,
-                                evidence_reference=result.evidence_references[0],
-                                observed_at=result.observed_at,
-                            ),
-                        ),
+                        plan_revision_id=revision.id,
                     )
                 )
             return await unit_of_work.runs.record_terminal(run.id, terminal_outcome)
@@ -194,6 +204,33 @@ class TripPlanning:
     ) -> PlanRevisionRecord | None:
         async with self._unit_of_work(principal) as unit_of_work:
             return await unit_of_work.plan_revisions.get_current(trip_id)
+
+    async def get_current_approval_request(
+        self,
+        principal: PlannerPrincipal,
+        trip_id: UUID,
+    ) -> ApprovalRequestRecord | None:
+        async with self._unit_of_work(principal) as unit_of_work:
+            revision = await unit_of_work.plan_revisions.get_current(trip_id)
+            if revision is None:
+                return None
+            return await unit_of_work.approvals.get_request(revision.id)
+
+    async def approve_plan_revision(
+        self,
+        principal: PlannerPrincipal,
+        action: BoundApprovalAction,
+    ) -> ApprovalRecord:
+        async with self._unit_of_work(principal) as unit_of_work:
+            return await unit_of_work.approvals.approve(action)
+
+    async def get_approval_for_plan_revision(
+        self,
+        principal: PlannerPrincipal,
+        plan_revision_id: UUID,
+    ) -> ApprovalRecord | None:
+        async with self._unit_of_work(principal) as unit_of_work:
+            return await unit_of_work.approvals.get_approval(plan_revision_id)
 
     def _unit_of_work(self, principal: PlannerPrincipal) -> UnitOfWork:
         if self._unit_of_work_factory is None:

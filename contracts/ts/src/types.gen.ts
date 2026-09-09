@@ -5,6 +5,56 @@ export type ClientOptions = {
 };
 
 /**
+ * ApprovalRequestResponse
+ */
+export type ApprovalRequestResponse = {
+    /**
+     * Approval Id
+     */
+    approval_id: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Plan Revision Id
+     */
+    plan_revision_id: string;
+};
+
+/**
+ * ApprovalResponse
+ */
+export type ApprovalResponse = {
+    /**
+     * Approval Request Id
+     */
+    approval_request_id: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Plan Revision Id
+     */
+    plan_revision_id: string;
+};
+
+/**
+ * BoundApprovalActionRequest
+ */
+export type BoundApprovalActionRequest = {
+    /**
+     * Approval Request Id
+     */
+    approval_request_id: string;
+    /**
+     * Plan Revision Id
+     */
+    plan_revision_id: string;
+};
+
+/**
  * CreateTripRequest
  */
 export type CreateTripRequest = {
@@ -265,6 +315,51 @@ export type TripStructureResponse = {
     stays: Array<TripStayResponse>;
 };
 
+export type ApprovePlanRevisionData = {
+    body: BoundApprovalActionRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/approvals';
+};
+
+export type ApprovePlanRevisionErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemResponse;
+    /**
+     * Forbidden
+     */
+    403: ProblemResponse;
+    /**
+     * Approval Not Found
+     */
+    404: ProblemResponse;
+    /**
+     * Approval Already Recorded
+     */
+    409: ProblemResponse;
+    /**
+     * Unprocessable Request
+     */
+    422: ProblemResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ProblemResponse;
+};
+
+export type ApprovePlanRevisionError = ApprovePlanRevisionErrors[keyof ApprovePlanRevisionErrors];
+
+export type ApprovePlanRevisionResponses = {
+    /**
+     * Successful Response
+     */
+    201: ApprovalResponse;
+};
+
+export type ApprovePlanRevisionResponse = ApprovePlanRevisionResponses[keyof ApprovePlanRevisionResponses];
+
 export type GetAuthenticatedPrincipalData = {
     body?: never;
     path?: never;
@@ -500,6 +595,56 @@ export type GetTripResponses = {
 };
 
 export type GetTripResponse = GetTripResponses[keyof GetTripResponses];
+
+export type GetCurrentApprovalRequestData = {
+    body?: never;
+    path: {
+        /**
+         * Trip Id
+         */
+        trip_id: string;
+    };
+    query?: never;
+    url: '/api/v1/trips/{trip_id}/approval-request';
+};
+
+export type GetCurrentApprovalRequestErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemResponse;
+    /**
+     * Forbidden
+     */
+    403: ProblemResponse;
+    /**
+     * Approval Not Found
+     */
+    404: ProblemResponse;
+    /**
+     * Approval Already Recorded
+     */
+    409: ProblemResponse;
+    /**
+     * Unprocessable Request
+     */
+    422: ProblemResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ProblemResponse;
+};
+
+export type GetCurrentApprovalRequestError = GetCurrentApprovalRequestErrors[keyof GetCurrentApprovalRequestErrors];
+
+export type GetCurrentApprovalRequestResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApprovalRequestResponse;
+};
+
+export type GetCurrentApprovalRequestResponse = GetCurrentApprovalRequestResponses[keyof GetCurrentApprovalRequestResponses];
 
 export type GetCurrentPlanRevisionData = {
     body?: never;

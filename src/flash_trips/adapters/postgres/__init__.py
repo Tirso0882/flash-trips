@@ -5,6 +5,7 @@ from flash_trips.adapters.postgres.database import (
     PostgresUnitOfWorkFactory,
 )
 from flash_trips.adapters.postgres.repositories import (
+    PostgresApprovalRepository,
     PostgresExternalIdentityRepository,
     PostgresPlannerRepository,
     PostgresRunRepository,
@@ -12,6 +13,7 @@ from flash_trips.adapters.postgres.repositories import (
 )
 
 __all__ = [
+    "PostgresApprovalRepository",
     "PostgresDatabase",
     "PostgresExternalIdentityRepository",
     "PostgresExternalIdentityRepositoryFactory",

@@ -7,6 +7,12 @@ from httpx import ASGITransport, AsyncClient
 
 from flash_trips.application import (
     ActiveRunExistsError,
+    ApprovalAlreadyRecordedError,
+    ApprovalNotFoundError,
+    ApprovalRecord,
+    ApprovalRepository,
+    ApprovalRequestRecord,
+    BoundApprovalAction,
     PlannerPrincipal,
     PlannerRecord,
     PlannerRepository,
@@ -139,6 +145,80 @@ class MemoryPlanRevisionRepository:
         ]
         return max(matches, key=lambda item: item.revision_number, default=None)
 
+    async def get_current_for_id(
+        self,
+        plan_revision_id: UUID,
+    ) -> PlanRevisionRecord | None:
+        revision = next(
+            (
+                item
+                for item in self.records
+                if item.id == plan_revision_id
+                and item.planner_id == self.principal.planner_id
+            ),
+            None,
+        )
+        if revision is None:
+            return None
+        current = await self.get_current(revision.trip_id)
+        return revision if current is not None and current.id == revision.id else None
+
+
+@dataclass(slots=True)
+class MemoryApprovalRepository:
+    principal: PlannerPrincipal
+    store: "MemoryUnitOfWorkFactory"
+
+    async def present(self, request: ApprovalRequestRecord) -> None:
+        self.store.approval_requests.append(request)
+
+    async def get_request(
+        self,
+        plan_revision_id: UUID,
+    ) -> ApprovalRequestRecord | None:
+        return next(
+            (
+                request
+                for request in self.store.approval_requests
+                if request.plan_revision_id == plan_revision_id
+                and request.planner_id == self.principal.planner_id
+            ),
+            None,
+        )
+
+    async def approve(self, action: BoundApprovalAction) -> ApprovalRecord:
+        request = await self.get_request(action.plan_revision_id)
+        revision = await MemoryPlanRevisionRepository(
+            self.principal, self.store.plan_revisions
+        ).get_current_for_id(action.plan_revision_id)
+        if (
+            request is None
+            or request.id != action.approval_request_id
+            or revision is None
+        ):
+            raise ApprovalNotFoundError(action.approval_request_id)
+        if await self.get_approval(action.plan_revision_id) is not None:
+            raise ApprovalAlreadyRecordedError(action.approval_request_id)
+        approval = ApprovalRecord(
+            id=uuid7(),
+            planner_id=self.principal.planner_id,
+            approval_request_id=action.approval_request_id,
+            plan_revision_id=action.plan_revision_id,
+        )
+        self.store.approvals.append(approval)
+        return approval
+
+    async def get_approval(self, plan_revision_id: UUID) -> ApprovalRecord | None:
+        return next(
+            (
+                approval
+                for approval in self.store.approvals
+                if approval.plan_revision_id == plan_revision_id
+                and approval.planner_id == self.principal.planner_id
+            ),
+            None,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class UnusedPlannerRepository:
@@ -154,12 +234,14 @@ class UnusedPlannerRepository:
 class MemoryUnitOfWork:
     principal: PlannerPrincipal
     store: "MemoryUnitOfWorkFactory"
+    approvals: ApprovalRepository = field(init=False)
     planners: PlannerRepository = field(init=False)
     plan_revisions: PlanRevisionRepository = field(init=False)
     trips: TripRepository = field(init=False)
     runs: RunRepository = field(init=False)
 
     def __post_init__(self) -> None:
+        self.approvals = MemoryApprovalRepository(self.principal, self.store)
         self.planners = UnusedPlannerRepository()
         self.plan_revisions = MemoryPlanRevisionRepository(
             self.principal, self.store.plan_revisions
@@ -181,6 +263,10 @@ class MemoryUnitOfWork:
 
 @dataclass(slots=True)
 class MemoryUnitOfWorkFactory:
+    approval_requests: list[ApprovalRequestRecord] = field(
+        default_factory=list[ApprovalRequestRecord]
+    )
+    approvals: list[ApprovalRecord] = field(default_factory=list[ApprovalRecord])
     plan_revisions: list[PlanRevisionRecord] = field(
         default_factory=list[PlanRevisionRecord]
     )

@@ -37,6 +37,12 @@ interface Session {
   csrf_token: string;
 }
 
+interface ApprovalRequest {
+  approval_id: string | null;
+  id: string;
+  plan_revision_id: string;
+}
+
 const runStatuses = new Set([
   "Running",
   "Succeeded",
@@ -115,6 +121,19 @@ function isPlanRevision(value: unknown): value is PlanRevision {
   );
 }
 
+function isApprovalRequest(value: unknown): value is ApprovalRequest {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    typeof value.id === "string" &&
+    "plan_revision_id" in value &&
+    typeof value.plan_revision_id === "string" &&
+    "approval_id" in value &&
+    (value.approval_id === null || typeof value.approval_id === "string")
+  );
+}
+
 async function loadCurrentPlanRevision(
   tripId: string,
 ): Promise<PlanRevision | null> {
@@ -126,7 +145,21 @@ async function loadCurrentPlanRevision(
   return isPlanRevision(revision) ? revision : null;
 }
 
+async function loadCurrentApprovalRequest(
+  tripId: string,
+): Promise<ApprovalRequest | null> {
+  const response = await fetch(`/api/trips/${tripId}/approval-request`, {
+    cache: "no-store",
+  });
+  if (!response.ok) return null;
+  const request: unknown = await response.json();
+  return isApprovalRequest(request) ? request : null;
+}
+
 export default function TripStation() {
+  const [approvalRequests, setApprovalRequests] = useState<
+    Record<string, ApprovalRequest>
+  >({});
   const [csrfToken, setCsrfToken] = useState("");
   const [error, setError] = useState("");
   const [runs, setRuns] = useState<Record<string, Run>>({});
@@ -157,6 +190,16 @@ export default function TripStation() {
           revisions
             .filter((revision) => revision !== null)
             .map((revision) => [revision.trip_id, revision]),
+        ),
+      );
+      const requests = await Promise.all(
+        list.items.map((trip) => loadCurrentApprovalRequest(trip.id)),
+      );
+      setApprovalRequests(
+        Object.fromEntries(
+          requests
+            .filter((request) => request !== null)
+            .map((request) => [request.plan_revision_id, request]),
         ),
       );
     }
@@ -226,7 +269,53 @@ export default function TripStation() {
         return;
       }
       setPlanRevisions((current) => ({ ...current, [trip.id]: revision }));
+      const request = await loadCurrentApprovalRequest(trip.id);
+      if (request === null) {
+        setError("The Approval Request response was invalid.");
+        return;
+      }
+      setApprovalRequests((current) => ({
+        ...current,
+        [revision.id]: request,
+      }));
     }
+  }
+
+  async function approve(request: ApprovalRequest): Promise<void> {
+    setError("");
+    const response = await fetch("/api/approvals", {
+      body: JSON.stringify({
+        approval_request_id: request.id,
+        plan_revision_id: request.plan_revision_id,
+      }),
+      headers: {
+        "content-type": "application/json",
+        "x-flash-trips-csrf": csrfToken,
+      },
+      method: "POST",
+    });
+    if (!response.ok) {
+      setError("The Plan Revision could not be approved.");
+      return;
+    }
+    const approval: unknown = await response.json();
+    if (
+      typeof approval !== "object" ||
+      approval === null ||
+      !("id" in approval) ||
+      typeof approval.id !== "string"
+    ) {
+      setError("The Approval response was invalid.");
+      return;
+    }
+    const approvalId = approval.id;
+    setApprovalRequests((current) => ({
+      ...current,
+      [request.plan_revision_id]: {
+        ...request,
+        approval_id: approvalId,
+      },
+    }));
   }
 
   return (
@@ -265,6 +354,10 @@ export default function TripStation() {
           {trips.map((trip) => {
             const stay = trip.structure.stays[0];
             const planRevision = planRevisions[trip.id];
+            const approvalRequest =
+              planRevision === undefined
+                ? undefined
+                : approvalRequests[planRevision.id];
             return (
               <li key={trip.id}>
                 <strong>{stay?.city}</strong>{" "}
@@ -288,6 +381,40 @@ export default function TripStation() {
                 ) : null}
                 {planRevision !== undefined ? (
                   <PlanRevisionView revision={planRevision} />
+                ) : null}
+                {planRevision !== undefined && approvalRequest !== undefined ? (
+                  <section
+                    aria-label={`Approval Request for Plan Revision ${planRevision.revision_number}`}
+                  >
+                    <h3>
+                      Approval Request for Plan Revision{" "}
+                      {planRevision.revision_number}
+                    </h3>
+                    <p>
+                      Request: <code>{approvalRequest.id}</code>
+                    </p>
+                    <p>
+                      Exact revision:{" "}
+                      <code>{approvalRequest.plan_revision_id}</code>
+                    </p>
+                    {approvalRequest.approval_id === null ? (
+                      <button
+                        disabled={csrfToken.length === 0}
+                        onClick={() => void approve(approvalRequest)}
+                        type="button"
+                      >
+                        Approve Plan Revision {planRevision.revision_number}
+                      </button>
+                    ) : (
+                      <p
+                        aria-label={`Approval for Plan Revision ${planRevision.revision_number}`}
+                        role="status"
+                      >
+                        Approval recorded for revision{" "}
+                        <code>{approvalRequest.plan_revision_id}</code>
+                      </p>
+                    )}
+                  </section>
                 ) : null}
               </li>
             );

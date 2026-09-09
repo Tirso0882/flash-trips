@@ -11,6 +11,11 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from flash_trips.application.persistence import (
     ActiveRunExistsError,
+    ApprovalAlreadyRecordedError,
+    ApprovalNotFoundError,
+    ApprovalRecord,
+    ApprovalRequestRecord,
+    BoundApprovalAction,
     PlanClaimKind,
     PlanClaimRecord,
     PlannerAccessStatus,
@@ -28,8 +33,11 @@ from flash_trips.application.persistence import (
 )
 from flash_trips.kernel.authenticated_principal import AuthenticatedPrincipal
 from flash_trips.kernel.evidence import EvidenceReference
+from flash_trips.kernel.identifiers import uuid7
 
 from .models import (
+    ApprovalModel,
+    ApprovalRequestModel,
     ExternalIdentityModel,
     PlanClaimModel,
     PlannerModel,
@@ -454,6 +462,138 @@ class PostgresPlanRevisionRepository:
                 )
                 for claim in claims
             ),
+        )
+
+
+class PostgresApprovalRepository:
+    def __init__(
+        self,
+        connection: AsyncConnection,
+        principal: PlannerPrincipal,
+    ) -> None:
+        self._connection = connection
+        self._principal = principal
+
+    async def present(self, request: ApprovalRequestRecord) -> None:
+        if request.planner_id != self._principal.planner_id:
+            raise ValueError("Approval Request does not match the repository principal")
+        current_revision = (
+            await self._connection.execute(
+                select(PlanRevisionModel.id)
+                .join(
+                    TripModel,
+                    (TripModel.id == PlanRevisionModel.trip_id)
+                    & (TripModel.planner_id == PlanRevisionModel.planner_id),
+                )
+                .where(
+                    PlanRevisionModel.id == request.plan_revision_id,
+                    PlanRevisionModel.planner_id == self._principal.planner_id,
+                    TripModel.current_plan_revision_id == PlanRevisionModel.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if current_revision is None:
+            raise ValueError("Plan Revision does not match the repository principal")
+        await self._connection.execute(
+            insert(ApprovalRequestModel).values(
+                id=request.id,
+                planner_id=self._principal.planner_id,
+                plan_revision_id=request.plan_revision_id,
+            )
+        )
+
+    async def get_request(
+        self,
+        plan_revision_id: UUID,
+    ) -> ApprovalRequestRecord | None:
+        row = (
+            await self._connection.execute(
+                select(
+                    ApprovalRequestModel.id,
+                    ApprovalRequestModel.planner_id,
+                    ApprovalRequestModel.plan_revision_id,
+                ).where(
+                    ApprovalRequestModel.plan_revision_id == plan_revision_id,
+                    ApprovalRequestModel.planner_id == self._principal.planner_id,
+                )
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        return ApprovalRequestRecord(
+            id=row.id,
+            planner_id=row.planner_id,
+            plan_revision_id=row.plan_revision_id,
+        )
+
+    async def approve(self, action: BoundApprovalAction) -> ApprovalRecord:
+        request_id = (
+            await self._connection.execute(
+                select(ApprovalRequestModel.id)
+                .join(
+                    PlanRevisionModel,
+                    (PlanRevisionModel.id == ApprovalRequestModel.plan_revision_id)
+                    & (PlanRevisionModel.planner_id == ApprovalRequestModel.planner_id),
+                )
+                .join(
+                    TripModel,
+                    (TripModel.id == PlanRevisionModel.trip_id)
+                    & (TripModel.planner_id == PlanRevisionModel.planner_id),
+                )
+                .where(
+                    ApprovalRequestModel.id == action.approval_request_id,
+                    ApprovalRequestModel.plan_revision_id == action.plan_revision_id,
+                    ApprovalRequestModel.planner_id == self._principal.planner_id,
+                    TripModel.current_plan_revision_id == action.plan_revision_id,
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if request_id is None:
+            raise ApprovalNotFoundError(action.approval_request_id)
+
+        approval = ApprovalRecord(
+            id=uuid7(),
+            planner_id=self._principal.planner_id,
+            approval_request_id=action.approval_request_id,
+            plan_revision_id=action.plan_revision_id,
+        )
+        inserted = await self._connection.execute(
+            postgres_insert(ApprovalModel)
+            .values(
+                id=approval.id,
+                planner_id=approval.planner_id,
+                approval_request_id=approval.approval_request_id,
+                plan_revision_id=approval.plan_revision_id,
+            )
+            .on_conflict_do_nothing(index_elements=[ApprovalModel.approval_request_id])
+            .returning(ApprovalModel.id)
+        )
+        if inserted.scalar_one_or_none() is None:
+            raise ApprovalAlreadyRecordedError(action.approval_request_id)
+        return approval
+
+    async def get_approval(self, plan_revision_id: UUID) -> ApprovalRecord | None:
+        row = (
+            await self._connection.execute(
+                select(
+                    ApprovalModel.id,
+                    ApprovalModel.planner_id,
+                    ApprovalModel.approval_request_id,
+                    ApprovalModel.plan_revision_id,
+                ).where(
+                    ApprovalModel.plan_revision_id == plan_revision_id,
+                    ApprovalModel.planner_id == self._principal.planner_id,
+                )
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        return ApprovalRecord(
+            id=row.id,
+            planner_id=row.planner_id,
+            approval_request_id=row.approval_request_id,
+            plan_revision_id=row.plan_revision_id,
         )
 
 

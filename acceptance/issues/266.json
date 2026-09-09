@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "issue": 266,
+  "title": "Approve a Plan Revision through one typed bound action",
+  "outcome": "A Planner can approve only the exact current Plan Revision named by an immutable Approval Request through a CSRF-protected typed action.",
+  "checks": [
+    {
+      "name": "Approval migration upgrade and downgrade",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/persistence/test_planner_persistence.py::test_migration_history_has_one_head_that_matches_the_mapped_models",
+        "tests/persistence/test_planner_persistence.py::test_planner_table_appears_on_upgrade_and_is_removed_on_rollback"
+      ]
+    },
+    {
+      "name": "Approval persistence and HTTP contracts",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/persistence/test_approval.py",
+        "tests/contract/test_http_approval.py"
+      ]
+    },
+    {
+      "name": "browser Approval journey",
+      "command": ["pnpm", "test:journey"]
+    }
+  ]
+}
