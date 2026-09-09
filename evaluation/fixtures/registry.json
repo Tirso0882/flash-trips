@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "fixtures": [
+    {
+      "id": "travel-readiness-lisbon-v1",
+      "path": "src/flash_trips/capabilities/travel_readiness/fixtures/travel-readiness-lisbon-v1.json",
+      "schema": "flash_trips.travel_readiness.fixture@1.0",
+      "content_sha256": "8fc324ca6d02525b7bd878129f9f8f66eeab4ac4b899688950e98bc6c09d6a9e",
+      "permanent": true
+    }
+  ]
+}

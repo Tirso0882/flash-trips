@@ -42,4 +42,27 @@ test("a Planner signs in and reaches an authenticated Planner surface", async ({
   await expect(resolved.json()).resolves.toEqual({
     csrf_token: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
   });
+
+  await page.getByLabel("City").fill("Lisbon");
+  await page.getByLabel("Start date").fill("2026-10-04");
+  await page.getByLabel("End date").fill("2026-10-07");
+  await page.getByLabel("Nights").fill("3");
+  await page.getByRole("button", { name: "Create Trip" }).click();
+
+  const savedTrips = page.getByRole("list", { name: "Saved Trips" });
+  await expect(savedTrips).toContainText("Lisbon");
+  const tripIdentifier = await savedTrips.locator("code").textContent();
+  expect(tripIdentifier).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
+
+  await page.getByRole("button", { name: "Start Run for Lisbon" }).click();
+  await expect(page.getByRole("status", { name: "Run for Lisbon" })).toContainText(
+    "Succeeded",
+  );
+
+  await page.reload();
+  await expect(page.getByRole("list", { name: "Saved Trips" })).toContainText(
+    tripIdentifier!,
+  );
 });

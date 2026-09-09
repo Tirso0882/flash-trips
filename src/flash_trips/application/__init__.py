@@ -7,10 +7,21 @@ from flash_trips.application.identity import (
     ResolvePlanner,
 )
 from flash_trips.application.persistence import (
+    ActiveRunExistsError,
     PlannerAccessStatus,
     PlannerPrincipal,
     PlannerRecord,
     PlannerRepository,
+    RunNotFoundError,
+    RunRecord,
+    RunRepository,
+    RunTerminalOutcome,
+    RunTerminalStatus,
+    TerminalOutcomeAlreadyRecordedError,
+    TripRecord,
+    TripRepository,
+    TripStayRecord,
+    TripStructureRecord,
     UnitOfWork,
     UnitOfWorkFactory,
 )
@@ -18,14 +29,21 @@ from flash_trips.application.ports import (
     AccessTokenVerificationError,
     AccessTokenVerifier,
 )
-from flash_trips.application.trip_planning import TripPlanning
+from flash_trips.application.trip_planning import (
+    NewTripStay,
+    TripNotFoundError,
+    TripPlanning,
+    UnsupportedTripStructureError,
+)
 
 __all__ = [
     "AccessTokenVerificationError",
     "AccessTokenVerifier",
+    "ActiveRunExistsError",
     "AllowedExternalIdentity",
     "ExternalIdentityRepository",
     "ExternalIdentityRepositoryFactory",
+    "NewTripStay",
     "PlannerAccessStatus",
     "PlannerPrincipal",
     "PlannerRecord",
@@ -33,7 +51,19 @@ __all__ = [
     "PlannerResolver",
     "RejectingPlannerResolver",
     "ResolvePlanner",
+    "RunNotFoundError",
+    "RunRecord",
+    "RunRepository",
+    "RunTerminalOutcome",
+    "RunTerminalStatus",
+    "TerminalOutcomeAlreadyRecordedError",
+    "TripNotFoundError",
     "TripPlanning",
+    "TripRecord",
+    "TripRepository",
+    "TripStayRecord",
+    "TripStructureRecord",
     "UnitOfWork",
     "UnitOfWorkFactory",
+    "UnsupportedTripStructureError",
 ]

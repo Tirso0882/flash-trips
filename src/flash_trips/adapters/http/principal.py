@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from typing import Annotated
 from uuid import UUID
 
@@ -9,6 +10,7 @@ from flash_trips.adapters.http.problems import ProblemResponse
 from flash_trips.application import (
     AccessTokenVerificationError,
     AccessTokenVerifier,
+    PlannerPrincipal,
     PlannerResolver,
 )
 
@@ -30,18 +32,16 @@ def _unauthenticated() -> HTTPException:
     return HTTPException(status_code=401, headers={"WWW-Authenticate": "Bearer"})
 
 
-def principal_router(
+def authenticated_planner(
     access_token_verifier: AccessTokenVerifier,
     planner_resolver: PlannerResolver,
-) -> APIRouter:
-    router = APIRouter(prefix="/api/v1")
-
-    async def authenticated_principal(
+) -> Callable[..., Awaitable[PlannerPrincipal]]:
+    async def resolve(
         credentials: Annotated[
             HTTPAuthorizationCredentials | None,
             Security(_bearer),
         ],
-    ) -> PlannerPrincipalResponse:
+    ) -> PlannerPrincipal:
         if credentials is None:
             raise _unauthenticated()
 
@@ -57,7 +57,22 @@ def principal_router(
         if planner is None:
             raise _unauthenticated()
 
-        return PlannerPrincipalResponse(planner_id=planner.planner_id)
+        return planner
+
+    return resolve
+
+
+def principal_router(
+    access_token_verifier: AccessTokenVerifier,
+    planner_resolver: PlannerResolver,
+) -> APIRouter:
+    router = APIRouter(prefix="/api/v1")
+    planner = authenticated_planner(access_token_verifier, planner_resolver)
+
+    async def authenticated_principal(
+        principal: Annotated[PlannerPrincipal, Security(planner)],
+    ) -> PlannerPrincipalResponse:
+        return PlannerPrincipalResponse(planner_id=principal.planner_id)
 
     router.add_api_route(
         "/authenticated-principal",

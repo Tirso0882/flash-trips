@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 
 from flash_trips.adapters.config import RuntimeSettings
@@ -12,8 +13,11 @@ from flash_trips.adapters.http.problems import (
     RequestIdMiddleware,
     http_problem,
     unhandled_problem,
+    validation_problem,
 )
+from flash_trips.adapters.http.runs import run_router
 from flash_trips.adapters.http.status import status_router
+from flash_trips.adapters.http.trips import trip_router
 from flash_trips.adapters.identity import (
     JwtAccessTokenVerifier,
     RejectingAccessTokenVerifier,
@@ -21,6 +25,7 @@ from flash_trips.adapters.identity import (
 from flash_trips.adapters.postgres import (
     PostgresDatabase,
     PostgresExternalIdentityRepositoryFactory,
+    PostgresUnitOfWorkFactory,
 )
 from flash_trips.adapters.service_status import StaticServiceStatus
 from flash_trips.adapters.telemetry import configure_logging
@@ -31,6 +36,10 @@ from flash_trips.application import (
     RejectingPlannerResolver,
     ResolvePlanner,
     TripPlanning,
+    UnitOfWorkFactory,
+)
+from flash_trips.capabilities.travel_readiness import (
+    FixtureTravelReadinessCapability,
 )
 
 
@@ -38,6 +47,7 @@ def create_app(
     access_token_verifier: AccessTokenVerifier | None = None,
     planner_resolver: PlannerResolver | None = None,
     database: PostgresDatabase | None = None,
+    unit_of_work_factory: UnitOfWorkFactory | None = None,
 ) -> FastAPI:
     if access_token_verifier is None:
         access_token_verifier = RejectingAccessTokenVerifier()
@@ -75,9 +85,21 @@ def create_app(
     app.state.logger = configure_logging()
     app.add_middleware(RequestIdMiddleware)
     app.add_exception_handler(HTTPException, http_problem)
+    app.add_exception_handler(RequestValidationError, validation_problem)
     app.add_exception_handler(Exception, unhandled_problem)
-    app.include_router(status_router(TripPlanning(StaticServiceStatus())))
+    trip_planning = TripPlanning(
+        StaticServiceStatus(),
+        unit_of_work_factory,
+        FixtureTravelReadinessCapability(),
+    )
+    app.include_router(status_router(trip_planning))
     app.include_router(principal_router(access_token_verifier, planner_resolver))
+    app.include_router(
+        trip_router(trip_planning, access_token_verifier, planner_resolver)
+    )
+    app.include_router(
+        run_router(trip_planning, access_token_verifier, planner_resolver)
+    )
     install_problem_media_type(app)
     return app
 
@@ -110,6 +132,7 @@ def create_runtime_app() -> FastAPI:
         access_token_verifier=verifier,
         planner_resolver=resolver,
         database=database,
+        unit_of_work_factory=PostgresUnitOfWorkFactory(database),
     )
 
 

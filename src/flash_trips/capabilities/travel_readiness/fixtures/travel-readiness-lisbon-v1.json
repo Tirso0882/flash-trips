@@ -1,0 +1,23 @@
+{
+  "fixture_id": "travel-readiness-lisbon-v1",
+  "schema": {
+    "name": "flash_trips.travel_readiness.fixture",
+    "major": 1,
+    "minor": 0,
+    "canonicalisation_version": 1
+  },
+  "provenance": {
+    "kind": "synthetic",
+    "authored_for_issue": 264,
+    "created_at": "2026-09-08T12:00:00Z"
+  },
+  "permitted_use": "Offline walking-skeleton evaluation and automated tests",
+  "expires_at": null,
+  "content_sha256": "8fc324ca6d02525b7bd878129f9f8f66eeab4ac4b899688950e98bc6c09d6a9e",
+  "content": {
+    "assessment": "ready",
+    "evidence_references": [],
+    "observed_at": "2026-09-08T12:00:00Z",
+    "summary": "No fixture Travel Readiness concerns were found for Lisbon."
+  }
+}

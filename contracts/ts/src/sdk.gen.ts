@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetAuthenticatedPrincipalData, GetAuthenticatedPrincipalErrors, GetAuthenticatedPrincipalResponses, GetServiceStatusData, GetServiceStatusErrors, GetServiceStatusResponses } from './types.gen';
+import type { CreateTripData, CreateTripErrors, CreateTripResponses, GetAuthenticatedPrincipalData, GetAuthenticatedPrincipalErrors, GetAuthenticatedPrincipalResponses, GetRunData, GetRunErrors, GetRunResponses, GetServiceStatusData, GetServiceStatusErrors, GetServiceStatusResponses, GetTripData, GetTripErrors, GetTripResponses, ListTripsData, ListTripsErrors, ListTripsResponses, StartRunData, StartRunErrors, StartRunResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -28,6 +28,55 @@ export const getAuthenticatedPrincipal = <ThrowOnError extends boolean = false>(
 });
 
 /**
+ * Get Run
+ */
+export const getRun = <ThrowOnError extends boolean = false>(options: Options<GetRunData, ThrowOnError>): RequestResult<GetRunResponses, GetRunErrors, ThrowOnError> => (options.client ?? client).get<GetRunResponses, GetRunErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/runs/{run_id}',
+    ...options
+});
+
+/**
  * Service Status
  */
 export const getServiceStatus = <ThrowOnError extends boolean = false>(options?: Options<GetServiceStatusData, ThrowOnError>): RequestResult<GetServiceStatusResponses, GetServiceStatusErrors, ThrowOnError> => (options?.client ?? client).get<GetServiceStatusResponses, GetServiceStatusErrors, ThrowOnError>({ url: '/api/v1/status', ...options });
+
+/**
+ * List Trips
+ */
+export const listTrips = <ThrowOnError extends boolean = false>(options?: Options<ListTripsData, ThrowOnError>): RequestResult<ListTripsResponses, ListTripsErrors, ThrowOnError> => (options?.client ?? client).get<ListTripsResponses, ListTripsErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/trips',
+    ...options
+});
+
+/**
+ * Create Trip
+ */
+export const createTrip = <ThrowOnError extends boolean = false>(options: Options<CreateTripData, ThrowOnError>): RequestResult<CreateTripResponses, CreateTripErrors, ThrowOnError> => (options.client ?? client).post<CreateTripResponses, CreateTripErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/trips',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Trip
+ */
+export const getTrip = <ThrowOnError extends boolean = false>(options: Options<GetTripData, ThrowOnError>): RequestResult<GetTripResponses, GetTripErrors, ThrowOnError> => (options.client ?? client).get<GetTripResponses, GetTripErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/trips/{trip_id}',
+    ...options
+});
+
+/**
+ * Start Run
+ */
+export const startRun = <ThrowOnError extends boolean = false>(options: Options<StartRunData, ThrowOnError>): RequestResult<StartRunResponses, StartRunErrors, ThrowOnError> => (options.client ?? client).post<StartRunResponses, StartRunErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/trips/{trip_id}/runs',
+    ...options
+});

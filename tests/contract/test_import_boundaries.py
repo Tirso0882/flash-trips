@@ -73,6 +73,48 @@ def test_capability_importing_framework_is_rejected(tmp_path: Path) -> None:
     assert "flash_trips.capabilities is not allowed to import fastapi" in result.stdout
 
 
+def test_capability_importing_application_is_rejected(tmp_path: Path) -> None:
+    shutil.copytree("src", tmp_path / "src")
+    shutil.copy(".importlinter", tmp_path / ".importlinter")
+    violation = (
+        tmp_path / "src/flash_trips/capabilities/trip_request/forbidden_application.py"
+    )
+    violation.write_text(
+        "from flash_trips.application import TripPlanning\n",
+        encoding="utf-8",
+    )
+
+    result = run_import_linter(tmp_path)
+
+    assert result.returncode == 1
+    assert "Capabilities do not depend on application adapters or composition" in (
+        result.stdout
+    )
+    assert (
+        "flash_trips.capabilities is not allowed to import flash_trips.application"
+        in result.stdout
+    )
+
+
+def test_kernel_capability_contract_is_importable_from_both_sides(
+    tmp_path: Path,
+) -> None:
+    shutil.copytree("src", tmp_path / "src")
+    shutil.copy(".importlinter", tmp_path / ".importlinter")
+    import_statement = "from flash_trips.kernel.capability import Capability\n"
+    (tmp_path / "src/flash_trips/application/kernel_contract_consumer.py").write_text(
+        import_statement, encoding="utf-8"
+    )
+    (
+        tmp_path
+        / "src/flash_trips/capabilities/trip_request/kernel_contract_consumer.py"
+    ).write_text(import_statement, encoding="utf-8")
+
+    result = run_import_linter(tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_adapter_importing_capability_internal_is_rejected(tmp_path: Path) -> None:
     shutil.copytree("src", tmp_path / "src")
     shutil.copy(".importlinter", tmp_path / ".importlinter")
