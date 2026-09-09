@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "issue": 264,
+  "title": "Define the Capability contract and complete one Run",
+  "outcome": "Started and observed one durable fixture-backed Run with a sealed terminal outcome through the Planner journey.",
+  "checks": [
+    {
+      "name": "Capability, Run HTTP, and PostgreSQL contracts",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/capabilities/test_fixture_capability.py",
+        "tests/contract/test_import_boundaries.py",
+        "tests/contract/test_http_run.py",
+        "tests/persistence/test_run_persistence.py",
+        "tests/persistence/test_planner_persistence.py"
+      ]
+    },
+    {
+      "name": "browser Run journey",
+      "command": ["pnpm", "test:journey"]
+    }
+  ]
+}

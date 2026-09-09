@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "issue": 262,
+  "title": "Introduce the browser journey harness and assert sign-in",
+  "outcome": "Added a real-browser sign-in station, disposable PostgreSQL harness, and isolated Azure walking-skeleton deployment.",
+  "checks": [
+    {
+      "name": "browser sign-in journey and harness lifecycle",
+      "command": ["pnpm", "test:journey"]
+    },
+    {
+      "name": "walking-skeleton Bicep compilation",
+      "command": [
+        "az",
+        "bicep",
+        "build",
+        "--file",
+        "infra/azure/skeleton.bicep",
+        "--stdout"
+      ]
+    }
+  ]
+}

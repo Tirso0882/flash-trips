@@ -24,6 +24,7 @@ lint:
 typecheck:
     uv run pyright
     pnpm exec tsc --project tsconfig.json
+    pnpm exec tsc --project tests/journey/tsconfig.json
     pnpm sandcastle:check
     pnpm --dir apps/web typecheck
 
@@ -31,12 +32,16 @@ security:
     uv run pip-audit
     pnpm audit --audit-level high
 
-test:
+journey:
+    pnpm test:journey
+
+test: journey
     uv run pytest
     pnpm test:acceptance
     pnpm test:sandcastle
     pnpm test:traceability
     pnpm test:web-boundaries
+    pnpm test:web-rendering
     bash tests/scripts/production-release-plan.test.sh
     bash tests/scripts/publish-via-github-api.test.sh
 

@@ -51,3 +51,22 @@ def test_committed_openapi_matches_the_pydantic_authored_contract() -> None:
                 "schema": {"$ref": "#/components/schemas/ProblemResponse"}
             }
         }
+
+    start_run = committed["paths"]["/api/v1/trips/{trip_id}/runs"]["post"]
+    assert start_run["operationId"] == "startRun"
+    assert set(start_run["responses"]) == {
+        "202",
+        "401",
+        "403",
+        "404",
+        "409",
+        "422",
+        "500",
+    }
+    assert start_run["responses"]["409"]["content"] == {
+        "application/problem+json": {
+            "schema": {"$ref": "#/components/schemas/ProblemResponse"}
+        }
+    }
+    get_run = committed["paths"]["/api/v1/runs/{run_id}"]["get"]
+    assert get_run["operationId"] == "getRun"

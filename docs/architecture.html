@@ -437,6 +437,8 @@
           <a href="#system">System map</a>
           <a href="#scope">Current scope</a>
           <a href="#request">Status request</a>
+          <a href="#trip-request">Trip request</a>
+          <a href="#run-request">Run request</a>
           <a href="#modules">Python modules</a>
           <a href="#sandcastle">Sandcastle</a>
           <a href="#delivery">Delivery</a>
@@ -670,7 +672,7 @@
           <p class="section-intro">
             The repository establishes strict seams ahead of the product
             implementation. Treat an existing directory as an allowed module
-            location, not proof that its runtime behavior exists.
+            location, not proof that every planned runtime behavior exists.
           </p>
           <div class="grid">
             <article class="panel">
@@ -680,13 +682,14 @@
                 problems, provider-neutral authenticated-principal handling,
                 exact External Identity lookup with active-Planner enforcement,
                 Google OIDC Authorization Code with PKCE BFF routes, opaque
-                revocable application sessions,
-                generated contracts, container smoke tests, CI, and Azure
-                delivery.
+                revocable application sessions, private Trip create/list/read
+                through the Planner UI and BFF, principal-scoped Trip
+                persistence, generated contracts, the browser journey,
+                container smoke tests, CI, and Azure delivery.
               </p>
             </article>
             <article class="panel">
-              <h3>Defined but not connected</h3>
+              <h3>Identity and persistence details</h3>
               <p>
                 <code>JwtAccessTokenVerifier</code> in
                 <code>src/flash_trips/adapters/identity/access_tokens.py</code>
@@ -735,17 +738,51 @@
                 logger, Key Vault access, and
                 Application Insights resources are not connected.
               </p>
+              <p>
+                <code>src/flash_trips/application/trip_planning.py</code> owns
+                Trip create, list, and read use cases through the
+                principal-scoped <code>UnitOfWork</code>. The PostgreSQL
+                adapter stores the ownership root in <code>trips</code> and
+                each ordered city stay in <code>trip_structures</code>. Both
+                carry the owning Planner reference. FastAPI exposes
+                <code>/api/v1/trips</code>, and
+                <code>apps/web/app/api/trips/route.ts</code> forwards only the
+                server-held access token after application-session and CSRF
+                checks. Foreign and absent Trip identifiers return the same
+                problem response.
+              </p>
+              <p>
+                The same application interface starts and reads
+                principal-scoped Runs. PostgreSQL stores each Run in
+                <code>runs</code>, seals its first terminal outcome, and uses a
+                partial unique index to allow only one active mutating Run per
+                Trip.
+              </p>
+              <p>
+                A successful Run uses that same
+                <code>UnitOfWork</code> transaction to insert one complete
+                <code>plan_revisions</code> snapshot and its evidence-backed
+                <code>plan_claims</code>, then seal the Run outcome.
+                <code>PlanRevisionRepository</code> exposes commit and current
+                read operations only. The mutable
+                <code>trips.current_plan_revision_id</code> head changes in the
+                same transaction. PostgreSQL rejects updates to both immutable
+                tables and permits at most one revision per Run.
+                FastAPI exposes the authoritative current snapshot at
+                <code>/api/v1/trips/{trip_id}/plan-revision</code>.
+              </p>
             </article>
             <article class="panel">
               <h3>Architecture slots</h3>
               <p>
-                Capability and platform packages are currently empty package
-                markers. Planner and Operator pages are shells. The ADRs define
-                the intended planning workflow, persistence, evidence, approval,
-                reasoning, and handbook behavior. No
-                <code>Capability</code> contract exists yet; ADR 0021 places it
-                in <code>src/flash_trips/kernel/</code>, the only module both
-                <code>flash_trips.application</code> and
+                The kernel now owns the typed <code>Capability</code> contract,
+                and Travel Readiness contains the one fixture-backed skeleton
+                implementation. The other Capability and platform packages
+                remain empty package markers. The Planner page contains the
+                thin Trip, Run, and Plan Revision stations; the Operator page
+                remains a shell.
+                The contract stays in <code>src/flash_trips/kernel/</code>, the
+                only module both <code>flash_trips.application</code> and
                 <code>flash_trips.capabilities</code> may import under
                 <code>.importlinter</code>.
               </p>
@@ -775,11 +812,11 @@
                 running system and keep their existing registry ownership.
               </p>
               <p>
-                The journey test and its Evaluation Fixtures are permanent. The
+                The browser harness and its sign-in, Trip, Run, and Plan
+                Revision stations now exist in <code>tests/journey/</code>.
+                The journey and its Evaluation Fixtures are permanent. The
                 thin implementations are not, and each carries an in-code
-                marker naming the Feature that replaces it. None of this exists
-                yet: no browser harness is present in the repository, and
-                <code>just test</code> currently runs only in-process tests.
+                marker naming the Feature that replaces it.
               </p>
             </article>
           </div>
@@ -815,6 +852,80 @@
             <li>
               The BFF returns the same JSON. Backend failures become a stable
               <code>application/problem+json</code> response with a request ID.
+            </li>
+          </ol>
+        </section>
+
+        <section id="trip-request">
+          <h2>Current Trip request</h2>
+          <p class="section-intro">
+            This path proves private Trip persistence through the browser, BFF,
+            generated client, application facade, and real PostgreSQL.
+          </p>
+          <ol class="steps">
+            <li>
+              The Planner page obtains the session-bound CSRF token and reads
+              <code>GET /api/trips</code>.
+            </li>
+            <li>
+              The BFF authorizes the opaque application-session cookie. Create
+              additionally checks the exact origin and
+              <code>x-flash-trips-csrf</code>.
+            </li>
+            <li>
+              The BFF maps the single-city form to the collection-shaped
+              generated contract and calls <code>/api/v1/trips</code> with the
+              server-held access token.
+            </li>
+            <li>
+              FastAPI resolves the active Planner and calls
+              <code>TripPlanning</code>. No Planner identifier comes from the
+              browser request.
+            </li>
+            <li>
+              The principal-scoped repository writes or reads
+              <code>trips</code> and ordered <code>trip_structures</code> rows
+              in one unit of work.
+            </li>
+            <li>
+              Reloading the Planner page lists the canonical row again with the
+              same opaque Trip identifier.
+            </li>
+          </ol>
+        </section>
+
+        <section id="run-request">
+          <h2>Current Run request</h2>
+          <p class="section-intro">
+            This path proves one durable, principal-owned Run and one sealed
+            terminal outcome using the permanent Travel Readiness Evaluation
+            Fixture.
+          </p>
+          <ol class="steps">
+            <li>
+              The Planner starts a Run through
+              <code>POST /api/trips/{tripId}/runs</code>. The BFF validates the
+              application session, origin, and CSRF token.
+            </li>
+            <li>
+              The generated client calls
+              <code>POST /api/v1/trips/{trip_id}/runs</code> with only the
+              server-held access token and Trip identifier.
+            </li>
+            <li>
+              <code>TripPlanning</code> verifies ownership, inserts the active
+              Run, and invokes the injected fixture Capability from
+              <code>capabilities/travel_readiness/</code>.
+            </li>
+            <li>
+              The principal-scoped Run repository conditionally records the
+              first terminal outcome. A later terminal write cannot overwrite
+              it, and the database rejects another active Run for the Trip.
+            </li>
+            <li>
+              The browser reads <code>GET /api/runs/{runId}</code>, which
+              forwards to <code>GET /api/v1/runs/{run_id}</code>, and displays
+              the terminal status.
             </li>
           </ol>
         </section>
@@ -1366,8 +1477,12 @@
             environment from <code>infra/azure/skeleton.bicep</code>. It
             exposes the web/BFF over HTTPS, keeps FastAPI internal, uses one
             low-cost PostgreSQL server, and grants no model or travel-provider
-            authority. The complete test baseline and the production path
-            shown below remain deferred and unchanged.
+            authority. The <code>walking-skeleton</code> job in
+            <code>.github/workflows/quality.yml</code> runs only after all CI
+            jobs pass on the E-SKELETON Feature branch, updates both apps,
+            migrates PostgreSQL, and smoke tests the public BFF boundary. The
+            complete test baseline and the production path shown below remain
+            deferred and unchanged.
           </p>
           <p class="section-intro">
             Pull requests and main run three CI jobs. The required quality job

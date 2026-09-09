@@ -3,7 +3,7 @@ from typing import Any, cast
 
 from fastapi import FastAPI
 
-_PROBLEM_STATUSES = ("401", "403", "404", "500")
+_PROBLEM_STATUSES = ("401", "403", "404", "409", "422", "500")
 _OPERATION_METHODS = ("delete", "get", "patch", "post", "put")
 
 
