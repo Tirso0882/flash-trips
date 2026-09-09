@@ -145,11 +145,6 @@ jobs:
       name: production
       url: https://${{ vars.AZURE_WEB_FQDN }}
     steps:
-      - name: Check out release source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: ${{ needs.release.outputs.release-sha }}
-
       - name: Sign in to Azure for production deployment
         uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac
         with:
@@ -157,13 +152,37 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy the tested image digests and smoke test production
+      - name: Deploy the tested image digests
         env:
           API_APP_NAME: ${{ vars.AZURE_API_APP_NAME }}
           API_FQDN: ${{ vars.AZURE_API_FQDN }}
           API_IMAGE: ${{ needs.release.outputs.api-image }}
-          PRODUCTION_URL: https://${{ vars.AZURE_WEB_FQDN }}
           RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           WEB_APP_NAME: ${{ vars.AZURE_WEB_APP_NAME }}
           WEB_IMAGE: ${{ needs.release.outputs.web-image }}
-        run: scripts/production-deploy.sh
+        run: |
+          az containerapp update \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$API_APP_NAME" \
+            --image "$API_IMAGE" \
+            --set-env-vars LIVE_CALL_ALLOWANCE=0
+          az containerapp update \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$WEB_APP_NAME" \
+            --image "$WEB_IMAGE" \
+            --set-env-vars "FLASH_TRIPS_API_BASE_URL=https://$API_FQDN"
+
+      - name: Smoke test production through the web boundary
+        env:
+          PRODUCTION_URL: https://${{ vars.AZURE_WEB_FQDN }}
+        run: |
+          response="$(mktemp)"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error \
+              "$PRODUCTION_URL/api/status" > "$response"; then
+              test -s "$response"
+              exit 0
+            fi
+            test "$attempt" -lt 30
+            sleep 10
+          done

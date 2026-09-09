@@ -111,6 +111,7 @@ function validRegistry() {
     "E-REASONING",
     "E-RECOVERY",
     "E-SCAFFOLD",
+    "E-SKELETON",
     "E-WX",
   ]) {
     registry.requirements.push({

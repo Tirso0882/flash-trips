@@ -38,7 +38,6 @@ test:
     pnpm test:traceability
     pnpm test:web-boundaries
     bash tests/scripts/production-release-plan.test.sh
-    bash tests/scripts/production-deploy.test.sh
     bash tests/scripts/publish-via-github-api.test.sh
 
 contracts:
@@ -63,7 +62,7 @@ containers:
 
 dev:
     docker compose up -d postgres azurite
-    trap 'kill 0' EXIT; uv run python -m flash_trips.composition & pnpm --dir apps/web dev & wait
+    trap 'kill 0' EXIT; uv run python -m flash_trips.composition & pnpm --dir apps/web exec next dev --experimental-https & wait
 
 verify: lint typecheck test
 

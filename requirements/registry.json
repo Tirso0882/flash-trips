@@ -82,12 +82,20 @@
       "location": "docs/adr/0020-propose-entra-external-id-for-pilot-authentication.md"
     },
     {
+      "id": "ADR-0021-SOURCE",
+      "location": "docs/adr/0021-prove-the-product-path-with-a-walking-skeleton.md"
+    },
+    {
       "id": "ISSUE-115",
       "location": "https://github.com/Tirso0882/flash-trips/issues/115"
     },
     {
       "id": "ISSUE-117",
       "location": "https://github.com/Tirso0882/flash-trips/issues/117"
+    },
+    {
+      "id": "ISSUE-261",
+      "location": "https://github.com/Tirso0882/flash-trips/issues/261"
     },
     {
       "id": "ISSUE-123",
@@ -356,6 +364,10 @@
       "source": "ADR-0020-SOURCE"
     },
     {
+      "id": "ADR-0021",
+      "source": "ADR-0021-SOURCE"
+    },
+    {
       "id": "E-ACCEPTANCE",
       "source": "ISSUE-165"
     },
@@ -378,6 +390,10 @@
     {
       "id": "E-SCAFFOLD",
       "source": "ISSUE-235"
+    },
+    {
+      "id": "E-SKELETON",
+      "source": "ISSUE-261"
     },
     {
       "id": "E-PLACES-ROUTES",
@@ -3194,6 +3210,19 @@
       "references": []
     },
     {
+      "id": "ADR-0021",
+      "kind": "adr",
+      "text": "Prove the product path with a walking skeleton",
+      "source": "ADR-0021-SOURCE",
+      "ownership": [
+        {
+          "disposition": "decision_record",
+          "owner": "ADR-0021"
+        }
+      ],
+      "references": []
+    },
+    {
       "id": "E-DECISIONS",
       "kind": "enabler",
       "text": "Produce one reviewed, internally consistent normative baseline and a machine-checkable traceability contract before implementation tasks rely on conflicting ADR text. The evidence must identify the authoritative clause for every reconciled rule and preserve the resolution history without silently rewriting prior decisions.",
@@ -3332,6 +3361,19 @@
         {
           "disposition": "enabler_ticket",
           "owner": "E-SCAFFOLD"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "E-SKELETON",
+      "kind": "enabler",
+      "text": "Prove that the whole product path connects before any station of it is built well. The evidence must be one always-green browser journey covering sign-in, Trip creation, a Run, a committed Plan Revision, an Approval and a Handbook download, running against a real browser and real PostgreSQL, so that the trunk Features deepen a running system instead of constructing one.",
+      "source": "ISSUE-261",
+      "ownership": [
+        {
+          "disposition": "enabler_ticket",
+          "owner": "E-SKELETON"
         }
       ],
       "references": []
