@@ -84,7 +84,7 @@ jobs:
 
       - name: Install the journey browser
         run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.*
           pnpm exec playwright install --with-deps chromium
 
       - name: Run both Planner journeys
@@ -156,7 +156,7 @@ jobs:
 
       - name: Install the journey browser
         run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.*
           pnpm exec playwright install --with-deps chromium
 
       - name: Establish separate database roles
