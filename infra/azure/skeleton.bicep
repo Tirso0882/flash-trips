@@ -146,6 +146,21 @@ resource deployFederation 'Microsoft.ManagedIdentity/userAssignedIdentities/fede
   }
 }
 
+resource deployEnvironmentFederation 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
+  parent: deployIdentity
+  name: 'github-skeleton-environment'
+  properties: {
+    audiences: [
+      'api://AzureADTokenExchange'
+    ]
+    issuer: 'https://token.actions.githubusercontent.com'
+    subject: '${githubSubjectPrefix}:environment:walking-skeleton'
+  }
+  dependsOn: [
+    deployFederation
+  ]
+}
+
 resource runtimeAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(registry.id, runtimeIdentity.id, acrPullRoleDefinitionId)
   scope: registry
