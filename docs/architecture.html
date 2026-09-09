@@ -1362,6 +1362,14 @@
         <section id="delivery">
           <h2>CI and Azure production</h2>
           <p class="section-intro">
+            During E-SKELETON, T-01 adds a separate disposable Azure feedback
+            environment from <code>infra/azure/skeleton.bicep</code>. It
+            exposes the web/BFF over HTTPS, keeps FastAPI internal, uses one
+            low-cost PostgreSQL server, and grants no model or travel-provider
+            authority. The complete test baseline and the production path
+            shown below remain deferred and unchanged.
+          </p>
+          <p class="section-intro">
             Pull requests and main run three CI jobs. The required quality job
             scans Git history for secrets before running the repository checks
             and web build. After successful main CI, a release plan continues
@@ -1782,7 +1790,10 @@
             >
               <div>
                 <strong><code>infra/azure/</code></strong>
-                <small>Production Azure resource definitions and RBAC.</small>
+                <small
+                  >Disposable skeleton and production Azure resource
+                  definitions.</small
+                >
               </div>
               <button data-copy="infra/azure/">Copy</button>
             </article>

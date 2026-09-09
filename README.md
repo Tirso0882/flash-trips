@@ -199,6 +199,22 @@ When a Feature has no remaining agent Tasks, Sandcastle marks its pull request
 ready and enables squash auto-merge. GitHub merges only after the required
 `quality`, `containers`, and `traceability` checks pass.
 
+## Walking-skeleton deployment
+
+T-01 owns a small Azure test environment for browser feedback while
+E-SKELETON is under development. `infra/azure/skeleton.bicep` defines its
+test-only registry, Container Apps environment, internal API, public web app,
+and low-cost PostgreSQL server. The template leaves placeholder containers
+until T-01 adds the Feature-branch deployment workflow and runtime
+configuration.
+
+This environment is disposable, has zero model and travel-provider authority,
+and is not a production baseline. Its PostgreSQL server accepts connections
+from Azure services and initially uses one administrator credential. Do not
+store that credential in git. Private networking, separate runtime and
+migration database identities, complete telemetry, production approval, and
+digest promotion remain deferred to E-AZURE-TEST and the release Features.
+
 ## Production deployment
 
 Production runs on Azure Container Apps in West Europe. GitHub Actions builds
