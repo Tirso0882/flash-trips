@@ -15,7 +15,10 @@ from flash_trips.kernel.identifiers import uuid7
 from flash_trips.kernel.service_status import ServiceStatus
 
 from .persistence import (
+    PlanClaimKind,
+    PlanClaimRecord,
     PlannerPrincipal,
+    PlanRevisionRecord,
     RunRecord,
     RunTerminalOutcome,
     RunTerminalStatus,
@@ -28,6 +31,7 @@ from .persistence import (
 from .ports import ServiceStatusPort
 
 # SKELETON_REPLACEMENT: issue 204 (FT-03) deepens this thin Trip station.
+# SKELETON_REPLACEMENT: issue 216 (FT-14) deepens this thin Plan Revision station.
 
 
 class UnsupportedTripStructureError(ValueError):
@@ -133,6 +137,10 @@ class TripPlanning:
             )
         )
         if isinstance(capability_outcome, CapabilityComplete):
+            if not capability_outcome.value.evidence_references:
+                raise RuntimeError(
+                    "A completed Capability result must reference Evidence"
+                )
             terminal_outcome = RunTerminalOutcome(
                 status=RunTerminalStatus.SUCCEEDED,
                 code="fixture_complete",
@@ -145,6 +153,30 @@ class TripPlanning:
                 detail=capability_outcome.detail,
             )
         async with self._unit_of_work(principal) as unit_of_work:
+            if isinstance(capability_outcome, CapabilityComplete):
+                current = await unit_of_work.plan_revisions.get_current(trip.id)
+                result = capability_outcome.value
+                await unit_of_work.plan_revisions.commit(
+                    PlanRevisionRecord(
+                        id=uuid7(),
+                        planner_id=principal.planner_id,
+                        trip_id=trip.id,
+                        run_id=run.id,
+                        revision_number=(
+                            current.revision_number + 1 if current is not None else 1
+                        ),
+                        base_revision_id=current.id if current is not None else None,
+                        claims=(
+                            PlanClaimRecord(
+                                id=uuid7(),
+                                kind=PlanClaimKind.TRAVEL_READINESS,
+                                text=result.summary,
+                                evidence_reference=result.evidence_references[0],
+                                observed_at=result.observed_at,
+                            ),
+                        ),
+                    )
+                )
             return await unit_of_work.runs.record_terminal(run.id, terminal_outcome)
 
     async def get_run(
@@ -154,6 +186,14 @@ class TripPlanning:
     ) -> RunRecord | None:
         async with self._unit_of_work(principal) as unit_of_work:
             return await unit_of_work.runs.get(run_id)
+
+    async def get_current_plan_revision(
+        self,
+        principal: PlannerPrincipal,
+        trip_id: UUID,
+    ) -> PlanRevisionRecord | None:
+        async with self._unit_of_work(principal) as unit_of_work:
+            return await unit_of_work.plan_revisions.get_current(trip_id)
 
     def _unit_of_work(self, principal: PlannerPrincipal) -> UnitOfWork:
         if self._unit_of_work_factory is None:

@@ -7,6 +7,7 @@ from starlette.exceptions import HTTPException
 
 from flash_trips.adapters.config import RuntimeSettings
 from flash_trips.adapters.http.openapi import install_problem_media_type
+from flash_trips.adapters.http.plan_revisions import plan_revision_router
 from flash_trips.adapters.http.principal import principal_router
 from flash_trips.adapters.http.problems import (
     ProblemResponse,
@@ -99,6 +100,9 @@ def create_app(
     )
     app.include_router(
         run_router(trip_planning, access_token_verifier, planner_resolver)
+    )
+    app.include_router(
+        plan_revision_router(trip_planning, access_token_verifier, planner_resolver)
     )
     install_problem_media_type(app)
     return app

@@ -12,6 +12,64 @@ export type CreateTripRequest = {
 };
 
 /**
+ * PlanClaimKind
+ */
+export type PlanClaimKind = 'travel_readiness';
+
+/**
+ * PlanClaimResponse
+ */
+export type PlanClaimResponse = {
+    /**
+     * Evidence Reference
+     */
+    evidence_reference: string;
+    /**
+     * Id
+     */
+    id: string;
+    kind: PlanClaimKind;
+    /**
+     * Observed At
+     */
+    observed_at: string;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * PlanRevisionResponse
+ */
+export type PlanRevisionResponse = {
+    /**
+     * Base Revision Id
+     */
+    base_revision_id: string | null;
+    /**
+     * Claims
+     */
+    claims: Array<PlanClaimResponse>;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Revision Number
+     */
+    revision_number: number;
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Trip Id
+     */
+    trip_id: string;
+};
+
+/**
  * PlannerPrincipalResponse
  */
 export type PlannerPrincipalResponse = {
@@ -442,6 +500,52 @@ export type GetTripResponses = {
 };
 
 export type GetTripResponse = GetTripResponses[keyof GetTripResponses];
+
+export type GetCurrentPlanRevisionData = {
+    body?: never;
+    path: {
+        /**
+         * Trip Id
+         */
+        trip_id: string;
+    };
+    query?: never;
+    url: '/api/v1/trips/{trip_id}/plan-revision';
+};
+
+export type GetCurrentPlanRevisionErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ProblemResponse;
+    /**
+     * Forbidden
+     */
+    403: ProblemResponse;
+    /**
+     * Plan Revision Not Found
+     */
+    404: ProblemResponse;
+    /**
+     * Unprocessable Request
+     */
+    422: ProblemResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ProblemResponse;
+};
+
+export type GetCurrentPlanRevisionError = GetCurrentPlanRevisionErrors[keyof GetCurrentPlanRevisionErrors];
+
+export type GetCurrentPlanRevisionResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlanRevisionResponse;
+};
+
+export type GetCurrentPlanRevisionResponse = GetCurrentPlanRevisionResponses[keyof GetCurrentPlanRevisionResponses];
 
 export type StartRunData = {
     body?: never;

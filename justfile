@@ -41,6 +41,7 @@ test: journey
     pnpm test:sandcastle
     pnpm test:traceability
     pnpm test:web-boundaries
+    pnpm test:web-rendering
     bash tests/scripts/production-release-plan.test.sh
     bash tests/scripts/publish-via-github-api.test.sh
 

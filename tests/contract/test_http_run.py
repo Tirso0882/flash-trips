@@ -10,6 +10,8 @@ from flash_trips.application import (
     PlannerPrincipal,
     PlannerRecord,
     PlannerRepository,
+    PlanRevisionRecord,
+    PlanRevisionRepository,
     RunRecord,
     RunRepository,
     RunTerminalOutcome,
@@ -119,6 +121,25 @@ class MemoryRunRepository:
         return completed
 
 
+@dataclass(slots=True)
+class MemoryPlanRevisionRepository:
+    principal: PlannerPrincipal
+    records: list[PlanRevisionRecord]
+
+    async def commit(self, revision: PlanRevisionRecord) -> PlanRevisionRecord:
+        self.records.append(revision)
+        return revision
+
+    async def get_current(self, trip_id: UUID) -> PlanRevisionRecord | None:
+        matches = [
+            revision
+            for revision in self.records
+            if revision.trip_id == trip_id
+            and revision.planner_id == self.principal.planner_id
+        ]
+        return max(matches, key=lambda item: item.revision_number, default=None)
+
+
 @dataclass(frozen=True, slots=True)
 class UnusedPlannerRepository:
     async def add(self, planner: PlannerRecord) -> None:
@@ -134,11 +155,15 @@ class MemoryUnitOfWork:
     principal: PlannerPrincipal
     store: "MemoryUnitOfWorkFactory"
     planners: PlannerRepository = field(init=False)
+    plan_revisions: PlanRevisionRepository = field(init=False)
     trips: TripRepository = field(init=False)
     runs: RunRepository = field(init=False)
 
     def __post_init__(self) -> None:
         self.planners = UnusedPlannerRepository()
+        self.plan_revisions = MemoryPlanRevisionRepository(
+            self.principal, self.store.plan_revisions
+        )
         self.trips = MemoryTripRepository(self.principal, self.store.trips)
         self.runs = MemoryRunRepository(self.principal, self.store.runs)
 
@@ -156,6 +181,9 @@ class MemoryUnitOfWork:
 
 @dataclass(slots=True)
 class MemoryUnitOfWorkFactory:
+    plan_revisions: list[PlanRevisionRecord] = field(
+        default_factory=list[PlanRevisionRecord]
+    )
     trips: list[TripRecord] = field(default_factory=list[TripRecord])
     runs: list[RunRecord] = field(default_factory=list[RunRecord])
 

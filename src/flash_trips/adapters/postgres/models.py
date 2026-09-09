@@ -52,13 +52,29 @@ class PlannerModel(PostgresBase):
 
 class TripModel(PostgresBase):
     __tablename__ = "trips"
-    __table_args__ = (UniqueConstraint("id", "planner_id"),)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["current_plan_revision_id", "id", "planner_id"],
+            [
+                "plan_revisions.id",
+                "plan_revisions.trip_id",
+                "plan_revisions.planner_id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "planner_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     planner_id: Mapped[UUID] = mapped_column(
         Uuid,
         ForeignKey("planners.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    )
+    current_plan_revision_id: Mapped[UUID | None] = mapped_column(
+        Uuid,
+        nullable=True,
         index=True,
     )
 
@@ -113,6 +129,7 @@ class RunModel(PostgresBase):
             unique=True,
             postgresql_where=text("terminal_status IS NULL"),
         ),
+        UniqueConstraint("id", "trip_id", "planner_id"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
@@ -126,6 +143,91 @@ class RunModel(PostgresBase):
     terminal_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
     terminal_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     terminal_detail: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class PlanRevisionModel(PostgresBase):
+    __tablename__ = "plan_revisions"
+    __table_args__ = (
+        CheckConstraint("revision_number > 0", name="revision_number_positive"),
+        ForeignKeyConstraint(
+            ["run_id", "trip_id", "planner_id"],
+            ["runs.id", "runs.trip_id", "runs.planner_id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["trip_id", "planner_id"],
+            ["trips.id", "trips.planner_id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["base_revision_id", "trip_id", "planner_id"],
+            [
+                "plan_revisions.id",
+                "plan_revisions.trip_id",
+                "plan_revisions.planner_id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "trip_id", "planner_id"),
+        UniqueConstraint("trip_id", "revision_number"),
+        UniqueConstraint("run_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    planner_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("planners.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    trip_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
+    run_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        nullable=False,
+        index=True,
+    )
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    base_revision_id: Mapped[UUID | None] = mapped_column(
+        Uuid,
+        nullable=True,
+        index=True,
+    )
+
+
+class PlanClaimModel(PostgresBase):
+    __tablename__ = "plan_claims"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('travel_readiness')",
+            name="kind_values",
+        ),
+        ForeignKeyConstraint(
+            ["plan_revision_id", "trip_id", "planner_id"],
+            [
+                "plan_revisions.id",
+                "plan_revisions.trip_id",
+                "plan_revisions.planner_id",
+            ],
+            ondelete="CASCADE",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    plan_revision_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
+    trip_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
+    planner_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("planners.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(100), nullable=False)
+    text: Mapped[str] = mapped_column(String(2000), nullable=False)
+    evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
 
 
 class ExternalIdentityModel(PostgresBase):

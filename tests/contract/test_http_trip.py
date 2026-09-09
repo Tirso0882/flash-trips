@@ -10,6 +10,8 @@ from flash_trips.application import (
     PlannerPrincipal,
     PlannerRecord,
     PlannerRepository,
+    PlanRevisionRecord,
+    PlanRevisionRepository,
     RunRecord,
     RunRepository,
     RunTerminalOutcome,
@@ -97,16 +99,29 @@ class UnusedRunRepository:
         raise AssertionError("Run persistence is not used by Trip HTTP tests")
 
 
+@dataclass(frozen=True, slots=True)
+class UnusedPlanRevisionRepository:
+    async def commit(self, revision: PlanRevisionRecord) -> PlanRevisionRecord:
+        del revision
+        raise AssertionError("Plan persistence is not used by Trip HTTP tests")
+
+    async def get_current(self, trip_id: UUID) -> PlanRevisionRecord | None:
+        del trip_id
+        return None
+
+
 @dataclass(slots=True)
 class MemoryUnitOfWork:
     principal: PlannerPrincipal
     records: list[TripRecord]
     planners: PlannerRepository = field(init=False)
+    plan_revisions: PlanRevisionRepository = field(init=False)
     runs: RunRepository = field(init=False)
     trips: TripRepository = field(init=False)
 
     def __post_init__(self) -> None:
         self.planners = UnusedPlannerRepository()
+        self.plan_revisions = UnusedPlanRevisionRepository()
         self.runs = UnusedRunRepository()
         self.trips = MemoryTripRepository(self.principal, self.records)
 

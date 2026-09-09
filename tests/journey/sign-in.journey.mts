@@ -60,9 +60,20 @@ test("a Planner signs in and reaches an authenticated Planner surface", async ({
   await expect(page.getByRole("status", { name: "Run for Lisbon" })).toContainText(
     "Succeeded",
   );
+  const planRevision = page.getByRole("region", { name: "Plan Revision 1" });
+  await expect(planRevision).toContainText(
+    "No fixture Travel Readiness concerns were found for Lisbon.",
+  );
+  const revisionIdentifier = await planRevision.locator("code").textContent();
+  expect(revisionIdentifier).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
 
   await page.reload();
   await expect(page.getByRole("list", { name: "Saved Trips" })).toContainText(
     tripIdentifier!,
   );
+  await expect(
+    page.getByRole("region", { name: "Plan Revision 1" }),
+  ).toContainText(revisionIdentifier!);
 });

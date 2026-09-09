@@ -1,9 +1,11 @@
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
+
+from flash_trips.kernel.evidence import EvidenceReference
 
 
 class PlannerAccessStatus(StrEnum):
@@ -118,6 +120,42 @@ class RunRepository(Protocol):
     ) -> RunRecord: ...
 
 
+class PlanClaimKind(StrEnum):
+    TRAVEL_READINESS = "travel_readiness"
+
+
+@dataclass(frozen=True, slots=True)
+class PlanClaimRecord:
+    """One evidence-backed claim in a complete Plan Revision."""
+
+    id: UUID
+    kind: PlanClaimKind
+    text: str
+    evidence_reference: EvidenceReference
+    observed_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class PlanRevisionRecord:
+    """One complete immutable version of a Travel Plan."""
+
+    id: UUID
+    planner_id: UUID
+    trip_id: UUID
+    run_id: UUID
+    revision_number: int
+    base_revision_id: UUID | None
+    claims: tuple[PlanClaimRecord, ...]
+
+
+class PlanRevisionRepository(Protocol):
+    """Commit-only access to immutable Plan Revisions."""
+
+    async def commit(self, revision: PlanRevisionRecord) -> PlanRevisionRecord: ...
+
+    async def get_current(self, trip_id: UUID) -> PlanRevisionRecord | None: ...
+
+
 class UnitOfWork(Protocol):
     @property
     def planners(self) -> PlannerRepository: ...
@@ -127,6 +165,9 @@ class UnitOfWork(Protocol):
 
     @property
     def runs(self) -> RunRepository: ...
+
+    @property
+    def plan_revisions(self) -> PlanRevisionRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

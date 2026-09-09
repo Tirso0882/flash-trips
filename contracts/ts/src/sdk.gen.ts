@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateTripData, CreateTripErrors, CreateTripResponses, GetAuthenticatedPrincipalData, GetAuthenticatedPrincipalErrors, GetAuthenticatedPrincipalResponses, GetRunData, GetRunErrors, GetRunResponses, GetServiceStatusData, GetServiceStatusErrors, GetServiceStatusResponses, GetTripData, GetTripErrors, GetTripResponses, ListTripsData, ListTripsErrors, ListTripsResponses, StartRunData, StartRunErrors, StartRunResponses } from './types.gen';
+import type { CreateTripData, CreateTripErrors, CreateTripResponses, GetAuthenticatedPrincipalData, GetAuthenticatedPrincipalErrors, GetAuthenticatedPrincipalResponses, GetCurrentPlanRevisionData, GetCurrentPlanRevisionErrors, GetCurrentPlanRevisionResponses, GetRunData, GetRunErrors, GetRunResponses, GetServiceStatusData, GetServiceStatusErrors, GetServiceStatusResponses, GetTripData, GetTripErrors, GetTripResponses, ListTripsData, ListTripsErrors, ListTripsResponses, StartRunData, StartRunErrors, StartRunResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -69,6 +69,15 @@ export const createTrip = <ThrowOnError extends boolean = false>(options: Option
 export const getTrip = <ThrowOnError extends boolean = false>(options: Options<GetTripData, ThrowOnError>): RequestResult<GetTripResponses, GetTripErrors, ThrowOnError> => (options.client ?? client).get<GetTripResponses, GetTripErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/trips/{trip_id}',
+    ...options
+});
+
+/**
+ * Get Current Plan Revision
+ */
+export const getCurrentPlanRevision = <ThrowOnError extends boolean = false>(options: Options<GetCurrentPlanRevisionData, ThrowOnError>): RequestResult<GetCurrentPlanRevisionResponses, GetCurrentPlanRevisionErrors, ThrowOnError> => (options.client ?? client).get<GetCurrentPlanRevisionResponses, GetCurrentPlanRevisionErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/trips/{trip_id}/plan-revision',
     ...options
 });
 

@@ -16,7 +16,7 @@ test("the disposable database has one Alembic head and is removed", async () => 
     assert.equal(database.query("SELECT count(*) FROM alembic_version;"), "1");
     assert.equal(
       database.query("SELECT version_num FROM alembic_version;"),
-      "0006_run",
+      "0007_plan_revision",
     );
   });
 

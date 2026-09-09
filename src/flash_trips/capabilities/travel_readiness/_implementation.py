@@ -11,6 +11,7 @@ from flash_trips.kernel.capability import (
     CapabilityComplete,
     CapabilityRefusal,
 )
+from flash_trips.kernel.evidence import EvidenceReference
 
 # SKELETON_REPLACEMENT: issue 208 (FT-06) replaces this fixture executor.
 
@@ -38,7 +39,7 @@ class TravelReadinessResult:
     assessment: TravelReadinessAssessment
     summary: str
     observed_at: datetime
-    evidence_references: tuple[str, ...]
+    evidence_references: tuple[EvidenceReference, ...]
 
 
 class FixtureTravelReadinessCapability(
@@ -83,7 +84,9 @@ class FixtureTravelReadinessCapability(
                 assessment=TravelReadinessAssessment(assessment),
                 summary=summary,
                 observed_at=datetime.fromisoformat(observed_at.replace("Z", "+00:00")),
-                evidence_references=evidence_references,
+                evidence_references=tuple(
+                    EvidenceReference(reference) for reference in evidence_references
+                ),
             )
         )
 

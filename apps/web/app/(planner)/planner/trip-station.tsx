@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
+import { PlanRevisionView, type PlanRevision } from "./plan-revision";
+
 interface TripStay {
   city: string;
   ends_on: string;
@@ -78,10 +80,59 @@ function isRun(value: unknown): value is Run {
   );
 }
 
+function isPlanRevision(value: unknown): value is PlanRevision {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    typeof value.id === "string" &&
+    "trip_id" in value &&
+    typeof value.trip_id === "string" &&
+    "run_id" in value &&
+    typeof value.run_id === "string" &&
+    "base_revision_id" in value &&
+    (value.base_revision_id === null ||
+      typeof value.base_revision_id === "string") &&
+    "revision_number" in value &&
+    typeof value.revision_number === "number" &&
+    "claims" in value &&
+    Array.isArray(value.claims) &&
+    value.claims.every(
+      (claim) =>
+        typeof claim === "object" &&
+        claim !== null &&
+        "id" in claim &&
+        typeof claim.id === "string" &&
+        "kind" in claim &&
+        claim.kind === "travel_readiness" &&
+        "text" in claim &&
+        typeof claim.text === "string" &&
+        "evidence_reference" in claim &&
+        typeof claim.evidence_reference === "string" &&
+        "observed_at" in claim &&
+        typeof claim.observed_at === "string",
+    )
+  );
+}
+
+async function loadCurrentPlanRevision(
+  tripId: string,
+): Promise<PlanRevision | null> {
+  const response = await fetch(`/api/trips/${tripId}/plan-revision`, {
+    cache: "no-store",
+  });
+  if (!response.ok) return null;
+  const revision: unknown = await response.json();
+  return isPlanRevision(revision) ? revision : null;
+}
+
 export default function TripStation() {
   const [csrfToken, setCsrfToken] = useState("");
   const [error, setError] = useState("");
   const [runs, setRuns] = useState<Record<string, Run>>({});
+  const [planRevisions, setPlanRevisions] = useState<
+    Record<string, PlanRevision>
+  >({});
   const [trips, setTrips] = useState<Trip[]>([]);
 
   useEffect(() => {
@@ -98,6 +149,16 @@ export default function TripStation() {
       const list = (await tripsResponse.json()) as TripList;
       setCsrfToken(session.csrf_token);
       setTrips(list.items);
+      const revisions = await Promise.all(
+        list.items.map((trip) => loadCurrentPlanRevision(trip.id)),
+      );
+      setPlanRevisions(
+        Object.fromEntries(
+          revisions
+            .filter((revision) => revision !== null)
+            .map((revision) => [revision.trip_id, revision]),
+        ),
+      );
     }
 
     void load();
@@ -158,6 +219,14 @@ export default function TripStation() {
       return;
     }
     setRuns((current) => ({ ...current, [trip.id]: run }));
+    if (run.status === "Succeeded") {
+      const revision = await loadCurrentPlanRevision(trip.id);
+      if (revision === null) {
+        setError("The current Plan Revision response was invalid.");
+        return;
+      }
+      setPlanRevisions((current) => ({ ...current, [trip.id]: revision }));
+    }
   }
 
   return (
@@ -195,6 +264,7 @@ export default function TripStation() {
         <ul aria-label="Saved Trips">
           {trips.map((trip) => {
             const stay = trip.structure.stays[0];
+            const planRevision = planRevisions[trip.id];
             return (
               <li key={trip.id}>
                 <strong>{stay?.city}</strong>{" "}
@@ -215,6 +285,9 @@ export default function TripStation() {
                   <p aria-label={`Run for ${stay?.city}`} role="status">
                     Run: {runs[trip.id]?.status}
                   </p>
+                ) : null}
+                {planRevision !== undefined ? (
+                  <PlanRevisionView revision={planRevision} />
                 ) : null}
               </li>
             );

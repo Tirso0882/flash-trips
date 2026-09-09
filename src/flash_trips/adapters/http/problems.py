@@ -93,6 +93,16 @@ async def http_problem(request: Request, error: Exception) -> JSONResponse:
             retryable=False,
             request_id=request.state.request_id,
         )
+    elif error.status_code == 404 and error.detail == "plan_revision_not_found":
+        problem = Problem(
+            type="https://flash-trips.example/problems/plan-revision-not-found",
+            title="Not Found",
+            status=404,
+            detail="The current Plan Revision was not found.",
+            code="plan_revision_not_found",
+            retryable=False,
+            request_id=request.state.request_id,
+        )
     elif error.status_code == 409 and active_run_id is not None:
         problem = Problem(
             type="https://flash-trips.example/problems/active-run-exists",

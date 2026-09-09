@@ -758,6 +758,19 @@
                 partial unique index to allow only one active mutating Run per
                 Trip.
               </p>
+              <p>
+                A successful Run uses that same
+                <code>UnitOfWork</code> transaction to insert one complete
+                <code>plan_revisions</code> snapshot and its evidence-backed
+                <code>plan_claims</code>, then seal the Run outcome.
+                <code>PlanRevisionRepository</code> exposes commit and current
+                read operations only. The mutable
+                <code>trips.current_plan_revision_id</code> head changes in the
+                same transaction. PostgreSQL rejects updates to both immutable
+                tables and permits at most one revision per Run.
+                FastAPI exposes the authoritative current snapshot at
+                <code>/api/v1/trips/{trip_id}/plan-revision</code>.
+              </p>
             </article>
             <article class="panel">
               <h3>Architecture slots</h3>
@@ -766,7 +779,8 @@
                 and Travel Readiness contains the one fixture-backed skeleton
                 implementation. The other Capability and platform packages
                 remain empty package markers. The Planner page contains the
-                thin Trip and Run stations; the Operator page remains a shell.
+                thin Trip, Run, and Plan Revision stations; the Operator page
+                remains a shell.
                 The contract stays in <code>src/flash_trips/kernel/</code>, the
                 only module both <code>flash_trips.application</code> and
                 <code>flash_trips.capabilities</code> may import under
@@ -798,11 +812,11 @@
                 running system and keep their existing registry ownership.
               </p>
               <p>
-                The browser harness and its sign-in, Trip, and Run stations now
-                exist in <code>tests/journey/</code>. The journey and its
-                Evaluation Fixtures are permanent. The thin implementations
-                are not, and each carries an in-code marker naming the Feature
-                that replaces it.
+                The browser harness and its sign-in, Trip, Run, and Plan
+                Revision stations now exist in <code>tests/journey/</code>.
+                The journey and its Evaluation Fixtures are permanent. The
+                thin implementations are not, and each carries an in-code
+                marker naming the Feature that replaces it.
               </p>
             </article>
           </div>

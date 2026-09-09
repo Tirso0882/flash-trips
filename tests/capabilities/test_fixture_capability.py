@@ -17,6 +17,7 @@ from flash_trips.kernel.capability import (
     CapabilityComplete,
     CapabilityRefusal,
 )
+from flash_trips.kernel.evidence import EvidenceReference
 
 
 @pytest.mark.asyncio
@@ -32,7 +33,9 @@ async def test_fixture_capability_returns_the_versioned_evaluation_fixture() -> 
             assessment=TravelReadinessAssessment.READY,
             summary="No fixture Travel Readiness concerns were found for Lisbon.",
             observed_at=datetime(2026, 9, 8, 12, 0, tzinfo=UTC),
-            evidence_references=(),
+            evidence_references=(
+                EvidenceReference("evaluation-fixture:travel-readiness-lisbon-v1"),
+            ),
         )
     )
 
@@ -67,7 +70,7 @@ def test_evaluation_fixture_is_registered_as_permanent_and_versioned() -> None:
             ),
             "schema": "flash_trips.travel_readiness.fixture@1.0",
             "content_sha256": (
-                "8fc324ca6d02525b7bd878129f9f8f66eeab4ac4b899688950e98bc6c09d6a9e"
+                "c5081b5640cd99dcf3b012096a24e7c8d52028079be2b28a43529dcf463c827f"
             ),
             "permanent": True,
         }

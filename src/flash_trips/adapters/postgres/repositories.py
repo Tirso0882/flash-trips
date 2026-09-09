@@ -11,9 +11,12 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from flash_trips.application.persistence import (
     ActiveRunExistsError,
+    PlanClaimKind,
+    PlanClaimRecord,
     PlannerAccessStatus,
     PlannerPrincipal,
     PlannerRecord,
+    PlanRevisionRecord,
     RunNotFoundError,
     RunRecord,
     RunTerminalOutcome,
@@ -24,10 +27,13 @@ from flash_trips.application.persistence import (
     TripStructureRecord,
 )
 from flash_trips.kernel.authenticated_principal import AuthenticatedPrincipal
+from flash_trips.kernel.evidence import EvidenceReference
 
 from .models import (
     ExternalIdentityModel,
+    PlanClaimModel,
     PlannerModel,
+    PlanRevisionModel,
     RunModel,
     TripModel,
     TripStructureModel,
@@ -285,6 +291,170 @@ class PostgresRunRepository:
         if existing is None:
             raise RunNotFoundError(run_id)
         raise TerminalOutcomeAlreadyRecordedError(run_id)
+
+
+class PostgresPlanRevisionRepository:
+    def __init__(
+        self,
+        connection: AsyncConnection,
+        principal: PlannerPrincipal,
+    ) -> None:
+        self._connection = connection
+        self._principal = principal
+
+    async def commit(self, revision: PlanRevisionRecord) -> PlanRevisionRecord:
+        if revision.planner_id != self._principal.planner_id:
+            raise ValueError("Plan Revision does not match the repository principal")
+        if not revision.claims:
+            raise ValueError("A Plan Revision must contain at least one claim")
+
+        trip = (
+            await self._connection.execute(
+                select(TripModel.id, TripModel.current_plan_revision_id)
+                .where(
+                    TripModel.id == revision.trip_id,
+                    TripModel.planner_id == self._principal.planner_id,
+                )
+                .with_for_update()
+            )
+        ).one_or_none()
+        if trip is None:
+            raise ValueError("Trip does not match the repository principal")
+        run_id = (
+            await self._connection.execute(
+                select(RunModel.id)
+                .where(
+                    RunModel.id == revision.run_id,
+                    RunModel.trip_id == revision.trip_id,
+                    RunModel.planner_id == self._principal.planner_id,
+                    RunModel.terminal_status.is_(None),
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if run_id is None:
+            raise ValueError("Run is not active for this Trip")
+
+        current = (
+            await self._get(revision.trip_id, trip.current_plan_revision_id)
+            if trip.current_plan_revision_id is not None
+            else None
+        )
+        expected_base = current.id if current is not None else None
+        expected_number = current.revision_number + 1 if current is not None else 1
+        if (
+            revision.base_revision_id != expected_base
+            or revision.revision_number != expected_number
+        ):
+            raise ValueError("Plan Revision does not extend the current revision")
+
+        await self._connection.execute(
+            insert(PlanRevisionModel).values(
+                id=revision.id,
+                planner_id=self._principal.planner_id,
+                trip_id=revision.trip_id,
+                run_id=revision.run_id,
+                revision_number=revision.revision_number,
+                base_revision_id=revision.base_revision_id,
+            )
+        )
+        await self._connection.execute(
+            insert(PlanClaimModel),
+            [
+                {
+                    "id": claim.id,
+                    "plan_revision_id": revision.id,
+                    "trip_id": revision.trip_id,
+                    "planner_id": self._principal.planner_id,
+                    "kind": claim.kind.value,
+                    "text": claim.text,
+                    "evidence_reference": claim.evidence_reference.value,
+                    "observed_at": claim.observed_at,
+                }
+                for claim in revision.claims
+            ],
+        )
+        await self._connection.execute(
+            update(TripModel)
+            .where(
+                TripModel.id == revision.trip_id,
+                TripModel.planner_id == self._principal.planner_id,
+                TripModel.current_plan_revision_id == revision.base_revision_id,
+            )
+            .values(current_plan_revision_id=revision.id)
+        )
+        return revision
+
+    async def get_current(self, trip_id: UUID) -> PlanRevisionRecord | None:
+        revision_id = (
+            await self._connection.execute(
+                select(TripModel.current_plan_revision_id).where(
+                    TripModel.id == trip_id,
+                    TripModel.planner_id == self._principal.planner_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if revision_id is None:
+            return None
+        return await self._get(trip_id, revision_id)
+
+    async def _get(
+        self,
+        trip_id: UUID,
+        revision_id: UUID,
+    ) -> PlanRevisionRecord | None:
+        revision = (
+            await self._connection.execute(
+                select(
+                    PlanRevisionModel.id,
+                    PlanRevisionModel.planner_id,
+                    PlanRevisionModel.trip_id,
+                    PlanRevisionModel.run_id,
+                    PlanRevisionModel.revision_number,
+                    PlanRevisionModel.base_revision_id,
+                ).where(
+                    PlanRevisionModel.id == revision_id,
+                    PlanRevisionModel.trip_id == trip_id,
+                    PlanRevisionModel.planner_id == self._principal.planner_id,
+                )
+            )
+        ).one_or_none()
+        if revision is None:
+            return None
+        claims = (
+            await self._connection.execute(
+                select(
+                    PlanClaimModel.id,
+                    PlanClaimModel.kind,
+                    PlanClaimModel.text,
+                    PlanClaimModel.evidence_reference,
+                    PlanClaimModel.observed_at,
+                )
+                .where(
+                    PlanClaimModel.plan_revision_id == revision.id,
+                    PlanClaimModel.planner_id == self._principal.planner_id,
+                )
+                .order_by(PlanClaimModel.id)
+            )
+        ).all()
+        return PlanRevisionRecord(
+            id=revision.id,
+            planner_id=revision.planner_id,
+            trip_id=revision.trip_id,
+            run_id=revision.run_id,
+            revision_number=revision.revision_number,
+            base_revision_id=revision.base_revision_id,
+            claims=tuple(
+                PlanClaimRecord(
+                    id=claim.id,
+                    kind=PlanClaimKind(claim.kind),
+                    text=claim.text,
+                    evidence_reference=EvidenceReference(claim.evidence_reference),
+                    observed_at=claim.observed_at,
+                )
+                for claim in claims
+            ),
+        )
 
 
 class PostgresExternalIdentityRepository:

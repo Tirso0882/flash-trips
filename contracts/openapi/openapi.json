@@ -13,6 +13,99 @@
         "title": "CreateTripRequest",
         "type": "object"
       },
+      "PlanClaimKind": {
+        "enum": [
+          "travel_readiness"
+        ],
+        "title": "PlanClaimKind",
+        "type": "string"
+      },
+      "PlanClaimResponse": {
+        "properties": {
+          "evidence_reference": {
+            "title": "Evidence Reference",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PlanClaimKind"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "text",
+          "evidence_reference",
+          "observed_at"
+        ],
+        "title": "PlanClaimResponse",
+        "type": "object"
+      },
+      "PlanRevisionResponse": {
+        "properties": {
+          "base_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Revision Id"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/PlanClaimResponse"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision_number": {
+            "title": "Revision Number",
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "trip_id": {
+            "format": "uuid",
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "trip_id",
+          "run_id",
+          "revision_number",
+          "base_revision_id",
+          "claims"
+        ],
+        "title": "PlanRevisionResponse",
+        "type": "object"
+      },
       "PlannerPrincipalResponse": {
         "properties": {
           "planner_id": {
@@ -751,6 +844,91 @@
           }
         ],
         "summary": "Get Trip"
+      }
+    },
+    "/api/v1/trips/{trip_id}/plan-revision": {
+      "get": {
+        "operationId": "getCurrentPlanRevision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trip_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Trip Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanRevisionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Plan Revision Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Current Plan Revision"
       }
     },
     "/api/v1/trips/{trip_id}/runs": {
