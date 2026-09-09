@@ -38,6 +38,10 @@ var acrPushRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '8311e382-0749-4cb8-b61a-304f252e45ec'
 )
+var readerRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  'acdd72a7-3385-48ef-bd42-f606fba81ae7'
+)
 var containerAppsContributorRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '358470bc-b998-42bd-ab17-a7e34c199c0f'
@@ -159,6 +163,16 @@ resource deployAcrPush 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     principalId: deployIdentity.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: acrPushRoleDefinitionId
+  }
+}
+
+resource deployAcrReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(registry.id, deployIdentity.id, readerRoleDefinitionId)
+  scope: registry
+  properties: {
+    principalId: deployIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: readerRoleDefinitionId
   }
 }
 
