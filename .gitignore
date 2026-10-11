@@ -29,6 +29,7 @@ node_modules/
 *.tsbuildinfo
 coverage/
 dist/
+test-results/
 
 # Agent/skills files
 .agents/skills/
