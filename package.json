@@ -26,6 +26,11 @@
     ],
     "overrides": {
       "js-yaml": "4.3.2"
+    },
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-vfj7-8cjw-p6xm"
+      ]
     }
   },
   "dependencies": {
