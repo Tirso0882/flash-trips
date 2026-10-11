@@ -16,6 +16,3 @@ This repository uses a single-context layout. See `docs/agents/domain.md`.
 
 Use `just verify` for the iteration loop. Run `just check` as the pre-commit gate.
 
-### GitHub publication
-
-When the user explicitly requests commit by category/subject, push, publish, or PR creation, skip HTTPS `git push` and invoke the Git Data API publisher (`scripts/publish-via-github-api.sh`) immediately. Never publish automatically at the beginning of unrelated work.
